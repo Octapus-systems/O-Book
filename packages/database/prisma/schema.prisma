@@ -1,0 +1,181 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum RoleType {
+  ADMIN
+  ACCOUNTANT
+  CEO
+  PARTNER
+}
+
+enum TransactionType {
+  CASH_IN
+  CASH_OUT
+}
+
+enum AuditAction {
+  CREATED
+  UPDATED
+  DELETED
+  COMMENT_ADDED
+  ATTACHMENT_ADDED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  pin       String   @db.VarChar(255)
+  role      Role     @relation(fields: [roleId], references: [id])
+  roleId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cashbooks          UserCashbook[]
+  createdTransactions Transaction[]
+  comments           TransactionComment[]
+  uploadedAttachments TransactionAttachment[]
+  auditLogs          AuditLog[]
+
+  @@index([email])
+  @@index([pin])
+}
+
+model Role {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  slug        RoleType   @unique
+  description String?
+  users       User[]
+  createdAt   DateTime   @default(now())
+}
+
+model Cashbook {
+  id           String        @id @default(cuid())
+  name         String
+  description  String?
+  baseCurrency String        @default("USD")
+  users        UserCashbook[]
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([name])
+}
+
+model UserCashbook {
+  id        String   @id @default(cuid())
+  userId    String
+  cashbookId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cashbook  Cashbook @relation(fields: [cashbookId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cashbookId])
+  @@index([userId])
+  @@index([cashbookId])
+}
+
+model Transaction {
+  id             String                @id @default(cuid())
+  cashbook       Cashbook              @relation(fields: [cashbookId], references: [id], onDelete: Cascade)
+  cashbookId     String
+  type           TransactionType
+  amount         Decimal               @db.Decimal(15, 2)
+  currency       String
+  category       Category              @relation(fields: [categoryId], references: [id])
+  categoryId     String
+  paymentMethod  PaymentMethod         @relation(fields: [paymentMethodId], references: [id])
+  paymentMethodId String
+  description    String?
+  date           DateTime              @default(now())
+  createdBy      User                  @relation(fields: [createdById], references: [id])
+  createdById     String
+  comments       TransactionComment[]
+  attachments    TransactionAttachment[]
+  auditLogs      AuditLog[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([cashbookId])
+  @@index([type])
+  @@index([date])
+  @@index([categoryId])
+  @@index([createdById])
+}
+
+model Category {
+  id          String        @id @default(cuid())
+  name        String        @unique
+  type        TransactionType
+  description String?
+  color       String?
+  isActive    Boolean       @default(true)
+  transactions Transaction[]
+  createdAt   DateTime      @default(now())
+
+  @@index([type])
+  @@index([isActive])
+}
+
+model PaymentMethod {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  description  String?
+  icon         String?
+  isActive     Boolean       @default(true)
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+
+  @@index([isActive])
+}
+
+model TransactionComment {
+  id           String       @id @default(cuid())
+  transaction  Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  transactionId String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  content      String
+  createdAt    DateTime     @default(now())
+
+  @@index([transactionId])
+  @@index([userId])
+}
+
+model TransactionAttachment {
+  id           String       @id @default(cuid())
+  transaction  Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  transactionId String
+  fileName     String
+  filePath     String
+  fileSize     Int
+  mimeType     String
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  uploadedById String
+  createdAt    DateTime     @default(now())
+
+  @@index([transactionId])
+  @@index([uploadedById])
+}
+
+model AuditLog {
+  id           String       @id @default(cuid())
+  transaction  Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  transactionId String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  action       AuditAction
+  changes      Json?
+  createdAt    DateTime     @default(now())
+
+  @@index([transactionId])
+  @@index([userId])
+  @@index([action])
+}
