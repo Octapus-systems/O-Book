@@ -1,12 +1,22 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-// Server-side client (API routes) — uses anon key, bucket policies allow anon INSERT/SELECT
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+let supabaseClient: any = null
+
+function getSupabaseClient() {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY) are missing in the runtime environment.')
+  }
+  if (!supabaseClient) {
+    supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
+  }
+  return supabaseClient
+}
 
 export const STORAGE_BUCKET = 'upload'
+
 
 /**
  * Upload a File to Supabase Storage.
@@ -23,6 +33,7 @@ export async function uploadAttachment(
   const arrayBuffer = await file.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
 
+  const supabase = getSupabaseClient()
   const { error } = await supabase.storage
     .from(STORAGE_BUCKET)
     .upload(path, buffer, {
@@ -35,5 +46,6 @@ export async function uploadAttachment(
   }
 
   const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path)
+
   return data.publicUrl
 }
