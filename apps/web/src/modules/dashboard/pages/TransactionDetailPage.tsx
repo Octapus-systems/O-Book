@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, Edit2, Trash2, Send, Clock, FileText, User, CreditCard } from 'lucide-react'
+import { ArrowLeft, Edit2, Trash2, Send, Clock, FileText, User, CreditCard, ExternalLink } from 'lucide-react'
 import type { Transaction } from '../types/transaction.types'
 import { mapApiTransactionToDisplay, type ApiTransaction } from '../utils/transaction.mapper'
 import { formatCurrencyAmount } from '../constants/currency'
@@ -20,6 +20,15 @@ interface AuditLog {
   action: string
   timestamp: string
 }
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
 
 export default function TransactionDetailPage({
   initialApiTransaction,
@@ -231,8 +240,72 @@ export default function TransactionDetailPage({
               {transaction.method || 'Cash'}
             </div>
           </div>
+
+          {transaction.description && (
+            <div className="sm:col-span-2 space-y-1">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                <FileText className="h-3 w-3" />
+                Description
+              </div>
+              <div className="text-sm font-medium text-on-surface break-words">
+                {transaction.description}
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Attachments Section */}
+      {transaction.attachments && transaction.attachments.length > 0 && (
+        <div className="glass-surface rim-light squircle p-6 sm:p-8">
+          <h3 className="mb-4 text-lg font-semibold text-on-surface">
+            Attachments ({transaction.attachments.length})
+          </h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {transaction.attachments.map((file) => {
+              const isImage = file.mimeType?.startsWith('image/')
+              return (
+                <div
+                  key={file.id}
+                  className="flex items-center justify-between rounded-2xl bg-on-surface/5 border border-on-surface/10 p-4 hover:bg-on-surface/10 transition-colors"
+                >
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-on-surface/5 text-on-surface-variant overflow-hidden">
+                      {isImage ? (
+                        <img
+                          src={file.filePath}
+                          alt={file.fileName}
+                          className="h-10 w-10 rounded-xl object-cover"
+                        />
+                      ) : (
+                        <FileText className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div className="overflow-hidden">
+                      <p className="truncate text-sm font-medium text-on-surface" title={file.fileName}>
+                        {file.fileName}
+                      </p>
+                      <p className="text-xs text-on-surface-variant">
+                        {formatFileSize(file.fileSize)}
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href={file.filePath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-full p-2 text-on-surface-variant hover:bg-on-surface/10 hover:text-on-surface transition-colors"
+                    title="Open attachment"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
 
       {/* Comments Section */}
       <div className="glass-surface rim-light squircle p-6 sm:p-8">

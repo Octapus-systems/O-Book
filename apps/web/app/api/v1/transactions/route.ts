@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { mkdir, writeFile } from 'fs/promises'
-import path from 'path'
 import { prisma } from '@/lib/prisma'
 import { getDatabaseErrorMessage } from '@/lib/database-error'
+import { uploadAttachment } from '@/lib/supabase-storage'
 
 const DEFAULT_CASHBOOK_ID = 'default-cashbook'
-const MAX_FILE_SIZE = 10 * 1024 * 1024
+const MAX_FILE_SIZE = 50 * 1024 * 1024  // 50 MB — matches Supabase bucket limit
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -18,28 +17,22 @@ async function saveAttachments(
   files: File[],
   uploadedById: string
 ) {
-  const uploadRoot = path.join(process.cwd(), 'public', 'uploads', 'transactions', transactionId)
-  await mkdir(uploadRoot, { recursive: true })
-
   for (const file of files) {
     if (!ALLOWED_MIME_TYPES.has(file.type)) {
       throw new Error(`Unsupported file type: ${file.type}`)
     }
     if (file.size > MAX_FILE_SIZE) {
-      throw new Error(`File "${file.name}" exceeds 10 MB limit`)
+      throw new Error(`File "${file.name}" exceeds 50 MB limit`)
     }
 
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-    const diskPath = path.join(uploadRoot, safeName)
-    const publicPath = `/uploads/transactions/${transactionId}/${safeName}`
-    const bytes = await file.arrayBuffer()
+    // Upload to Supabase Storage — returns public URL
+    const publicUrl = await uploadAttachment(transactionId, file)
 
-    await writeFile(diskPath, Buffer.from(bytes))
     await prisma.transactionAttachment.create({
       data: {
         transactionId,
         fileName: file.name,
-        filePath: publicPath,
+        filePath: publicUrl,
         fileSize: file.size,
         mimeType: file.type,
         uploadedById,
@@ -51,7 +44,7 @@ async function saveAttachments(
         transactionId,
         userId: uploadedById,
         action: 'ATTACHMENT_ADDED',
-        changes: { fileName: file.name },
+        changes: { fileName: file.name, url: publicUrl },
       },
     })
   }

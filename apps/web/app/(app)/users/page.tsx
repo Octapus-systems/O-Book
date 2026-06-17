@@ -1,5 +1,5 @@
-import { ComingSoonPage } from '@/modules/dashboard/pages/ComingSoonPage'
+import UsersPage from '@/modules/dashboard/pages/UsersPage'
 
-export default function UsersPage() {
-  return <ComingSoonPage title="Users" />
+export default function UsersRoute() {
+  return <UsersPage />
 }

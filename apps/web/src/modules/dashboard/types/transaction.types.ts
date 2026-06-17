@@ -19,6 +19,7 @@ export type Transaction = {
   method?: string
   description?: string | null
   comments?: Comment[]
+  attachments?: Attachment[]
 }
 
 export type Comment = {
@@ -31,3 +32,15 @@ export type Comment = {
   highlight?: string
   isHighlighted?: boolean
 }
+
+export type Attachment = {
+  id: string
+  fileName: string
+  filePath: string
+  fileSize: number
+  mimeType: string
+  uploadedById?: string
+  createdAt?: string
+}
+
+

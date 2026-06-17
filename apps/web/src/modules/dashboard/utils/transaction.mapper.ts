@@ -13,6 +13,15 @@ export type ApiTransaction = {
   paymentMethod: { id: string; name: string }
   createdBy: { id: string; name: string; email: string }
   cashbook: { id: string; name: string; baseCurrency: string }
+  attachments?: Array<{
+    id: string
+    fileName: string
+    filePath: string
+    fileSize: number
+    mimeType: string
+    uploadedById?: string
+    createdAt?: string | Date
+  }>
 }
 
 const CATEGORY_STYLES: Array<'secondary' | 'tertiary' | 'primary'> = [
@@ -61,5 +70,17 @@ export function mapApiTransactionToDisplay(tx: ApiTransaction, index = 0): Trans
     },
     method: tx.paymentMethod.name,
     description: tx.description,
+    attachments: tx.attachments?.map((att) => ({
+      id: att.id,
+      fileName: att.fileName,
+      filePath: att.filePath,
+      fileSize: att.fileSize,
+      mimeType: att.mimeType,
+      uploadedById: att.uploadedById,
+      createdAt: att.createdAt
+        ? (typeof att.createdAt === 'string' ? att.createdAt : att.createdAt.toISOString())
+        : undefined,
+    })),
   }
 }
+
