@@ -58,7 +58,7 @@ export default async function Page({ params }: PageProps) {
       name: transaction.cashbook.name,
       baseCurrency: transaction.cashbook.baseCurrency,
     },
-    attachments: transaction.attachments.map((att) => ({
+    attachments: transaction.attachments.map((att: { id: string; fileName: string; filePath: string; fileSize: number; mimeType: string }) => ({
       id: att.id,
       fileName: att.fileName,
       filePath: att.filePath,

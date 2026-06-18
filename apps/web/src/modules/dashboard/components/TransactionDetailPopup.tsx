@@ -1,6 +1,6 @@
 'use client'
 
-import { X, ArrowLeft, Edit2, Trash2, Send, Clock, User, FileText, CreditCard } from 'lucide-react'
+import { X, ArrowLeft, Edit2, Trash2, Send, Clock, User, FileText, CreditCard, ExternalLink } from 'lucide-react'
 import type { Transaction } from '../types/transaction.types'
 import { formatCurrencyAmount } from '../constants/currency'
 import { useState } from 'react'
@@ -25,6 +25,14 @@ interface AuditLog {
   user: string
   action: string
   timestamp: string
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 export function TransactionDetailPopup({
@@ -157,12 +165,76 @@ export function TransactionDetailPopup({
                 Payment Method
               </div>
               <div className="text-sm font-medium text-white">
-                Cash
+                {transaction.method || 'Cash'}
               </div>
             </div>
+
+            {transaction.description && (
+              <div className="sm:col-span-2 space-y-1">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/50">
+                  <FileText className="h-3 w-3" />
+                  Description
+                </div>
+                <div className="text-sm font-medium text-white break-words">
+                  {transaction.description}
+                </div>
+              </div>
+            )}
           </div>
 
         </div>
+
+        {/* Attachments Section */}
+        {transaction.attachments && transaction.attachments.length > 0 && (
+          <div className="mb-8 space-y-4">
+            <h3 className="text-lg font-semibold text-white">
+              Attachments ({transaction.attachments.length})
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {transaction.attachments.map((file) => {
+                const isImage = file.mimeType?.startsWith('image/')
+                return (
+                  <div
+                    key={file.id}
+                    className="flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 p-4 hover:bg-white/10 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/70 overflow-hidden">
+                        {isImage ? (
+                          <img
+                            src={file.filePath}
+                            alt={file.fileName}
+                            className="h-10 w-10 rounded-xl object-cover"
+                          />
+                        ) : (
+                          <FileText className="h-5 w-5" />
+                        )}
+                      </div>
+                      <div className="overflow-hidden">
+                        <p className="truncate text-sm font-medium text-white" title={file.fileName}>
+                          {file.fileName}
+                        </p>
+                        <p className="text-xs text-white/50">
+                          {formatFileSize(file.fileSize)}
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={file.filePath}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-full p-2 text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+                      title="Open attachment"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
 
         {/* Comments Section */}
         <div className="mb-8 space-y-4">

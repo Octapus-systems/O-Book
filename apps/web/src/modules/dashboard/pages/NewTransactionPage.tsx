@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { TransactionEntryForm } from '../components/TransactionEntryForm'
+import { DEFAULT_CURRENCY, type SupportedCurrency } from '../constants/currency'
 import type { TransactionType } from '../types/transaction.types'
 
 function parseInitialType(typeParam: string | null): TransactionType {
@@ -14,6 +15,7 @@ export default function NewTransactionPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialType = parseInitialType(searchParams.get('type'))
+  const currencyParam = (searchParams.get('currency') as SupportedCurrency) || DEFAULT_CURRENCY
 
   return (
     <div className="min-w-0 flex-1 space-y-6 fade-in">
@@ -21,7 +23,7 @@ export default function NewTransactionPage() {
         <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={() => router.push('/transactions')}
+            onClick={() => router.push(`/transactions?currency=${currencyParam}`)}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-outline-variant bg-surface-container-lowest text-on-surface-variant transition-colors hover:border-primary/30 hover:text-primary"
             aria-label="Back to transactions"
           >

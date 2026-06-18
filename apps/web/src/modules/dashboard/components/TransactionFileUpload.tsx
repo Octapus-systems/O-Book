@@ -59,7 +59,7 @@ export function TransactionFileUpload({ files, onChange, disabled }: Transaction
           <p className="font-title text-title-sm font-semibold text-on-surface">
             Upload bills or receipts
           </p>
-          <p className="mt-1 text-label-sm text-outline">PNG, JPG, WEBP, or PDF up to 10 MB each</p>
+          <p className="mt-1 text-label-sm text-outline">PNG, JPG, WEBP, or PDF up to 50 MB each</p>
         </div>
       </button>
 

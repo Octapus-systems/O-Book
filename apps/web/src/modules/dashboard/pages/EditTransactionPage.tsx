@@ -1,17 +1,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { TransactionEntryForm } from '../components/TransactionEntryForm'
 import { mapApiTransactionToDisplay, type ApiTransaction } from '../utils/transaction.mapper'
-import type { SupportedCurrency } from '../constants/currency'
+import { DEFAULT_CURRENCY, type SupportedCurrency } from '../constants/currency'
 import type { TransactionType } from '../types/transaction.types'
 
 export default function EditTransactionPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const transactionId = params.id as string
+  const currencyParam = (searchParams.get('currency') as SupportedCurrency) || DEFAULT_CURRENCY
 
   const [transaction, setTransaction] = useState<ApiTransaction | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -55,7 +57,7 @@ export default function EditTransactionPage() {
       <div className="flex min-h-[400px] flex-col items-center justify-center gap-4">
         <div className="text-body-md text-red-700">{error || 'Transaction not found'}</div>
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push(`/transactions?currency=${currencyParam}`)}
           className="rounded-full bg-[#6D4AFF] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#8B6BFF] transition-colors"
         >
           Go Back
@@ -72,6 +74,7 @@ export default function EditTransactionPage() {
     paymentMethodId: transaction.paymentMethod?.id || '',
     date: transaction.date ? new Date(transaction.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
     description: transaction.description || undefined,
+    createdById: transaction.createdBy?.id || '',
   }
 
   return (
@@ -80,7 +83,7 @@ export default function EditTransactionPage() {
         <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={() => router.push(`/transactions/${transactionId}`)}
+            onClick={() => router.push(`/transactions/${transactionId}?currency=${currencyParam}`)}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-outline-variant bg-surface-container-lowest text-on-surface-variant transition-colors hover:border-primary/30 hover:text-primary"
             aria-label="Back to transaction"
           >

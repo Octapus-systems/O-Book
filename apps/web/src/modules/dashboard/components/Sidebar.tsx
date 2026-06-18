@@ -6,12 +6,19 @@ import { Wallet, PlusCircle, X } from 'lucide-react'
 import { NAV_ITEMS } from '../constants/navigation'
 import { cn } from '@/lib/utils'
 import { useSidebarStore } from '@/lib/store'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { getAuthUser } from '@/lib/auth-store'
 
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { isOpen, closeSidebar, isMobile } = useSidebarStore()
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    const user = getAuthUser()
+    setIsAdmin(user?.role === 'ADMIN')
+  }, [])
 
   // Close sidebar on route change on mobile
   useEffect(() => {
@@ -65,7 +72,7 @@ export function Sidebar() {
 
           {/* Navigation */}
           <nav className="flex-1 space-y-0.5 overflow-y-auto custom-scrollbar px-3">
-            {NAV_ITEMS.map((item) => {
+            {NAV_ITEMS.filter((item) => item.href !== '/users' || isAdmin).map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
               const Icon = item.icon
 
