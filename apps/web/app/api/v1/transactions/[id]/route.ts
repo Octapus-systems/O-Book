@@ -38,7 +38,7 @@ export async function GET(
 
     return NextResponse.json(
       { success: true, data: apiTransaction },
-      { headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=30' } }
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' } }
     )
   } catch (error) {
     console.error('Fetch transaction error:', error)
@@ -57,7 +57,7 @@ export async function PATCH(
     const id = (await params).id
     const body = await request.json()
 
-    const { type, amount, categoryId, paymentMethodId, currency, description, date } = body
+    const { type, amount, categoryId, paymentMethodId, currency, description, date, createdById } = body
 
     const existingTransaction = await prisma.transaction.findUnique({
       where: { id },
@@ -78,6 +78,7 @@ export async function PATCH(
     if (currency !== undefined) updateData.currency = currency
     if (description !== undefined) updateData.description = description
     if (date !== undefined) updateData.date = new Date(date)
+    if (createdById !== undefined) updateData.createdById = createdById
 
     const updatedTransaction = await prisma.transaction.update({
       where: { id },

@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { getAuthUser } from '@/lib/auth-store'
 import { Plus, Pencil, Trash2, X, Eye, EyeOff, ShieldCheck, BarChart2, Briefcase } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -296,10 +298,22 @@ function UserModal({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function UsersPage() {
+  const router = useRouter()
   const [users, setUsers] = useState<AppUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [modal, setModal] = useState<{ mode: ModalMode; user: AppUser | null } | null>(null)
+
+  useEffect(() => {
+    const user = getAuthUser()
+    if (!user) {
+      router.replace('/')
+      return
+    }
+    if (user.role !== 'ADMIN') {
+      router.replace('/transactions')
+    }
+  }, [router])
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)

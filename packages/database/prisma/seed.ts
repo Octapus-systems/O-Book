@@ -1,9 +1,10 @@
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcrypt'
 import { config } from 'dotenv'
+import path from 'path'
 
 // Load environment variables from root .env file
-config({ path: '../../../.env' })
+config({ path: path.resolve(__dirname, '../../../../.env'), override: true })
 
 const prisma = new PrismaClient()
 
@@ -53,11 +54,13 @@ async function main() {
 
   console.log('Roles created')
 
-  // Create admin user with PIN: 0000
-  const hashedPin = await bcrypt.hash('0000', 10)
+  // Create admin user with PIN: 2133
+  const hashedPin = await bcrypt.hash('2133', 10)
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@obook.com' },
-    update: {},
+    update: {
+      pin: hashedPin,
+    },
     create: {
       name: 'Admin User',
       email: 'admin@obook.com',
@@ -66,7 +69,7 @@ async function main() {
     },
   })
 
-  console.log('Admin user created (PIN: 0000)')
+  console.log('Admin user created (PIN: 2133)')
 
   // Create default cashbook
   const defaultCashbook = await prisma.cashbook.upsert({

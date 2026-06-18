@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/modules/authentication/components/Button'
@@ -36,6 +36,7 @@ type TransactionEntryFormProps = {
     paymentMethodId: string
     date: string
     description?: string
+    createdById?: string
   }
 }
 
@@ -47,6 +48,8 @@ function todayIsoDate(): string {
 
 export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, initialData }: TransactionEntryFormProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const currencyParam = (searchParams.get('currency') as SupportedCurrency) || DEFAULT_CURRENCY
   const isEditMode = !!transactionId
   const [transactionType, setTransactionType] = useState<TransactionType>(initialData?.type || initialType)
   const [categories, setCategories] = useState<CategoryOption[]>([])
@@ -63,6 +66,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
     paymentMethodId: initialData.paymentMethodId,
     date: initialData.date,
     description: initialData.description || '',
+    createdById: initialData.createdById || '',
   } : {
     type: initialType,
     currency: DEFAULT_CURRENCY,
@@ -71,6 +75,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
     paymentMethodId: '',
     date: todayIsoDate(),
     description: '',
+    createdById: '',
   }
 
   const {
@@ -88,12 +93,44 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
   const amount = watch('amount')
   const currency = watch('currency') as SupportedCurrency
 
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [usersList, setUsersList] = useState<any[]>([])
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false)
+
   useEffect(() => {
     const user = getAuthUser()
     if (!user) {
       router.replace('/')
+      return
     }
-  }, [router])
+    const isUserAdmin = user.role === 'ADMIN'
+    setIsAdmin(isUserAdmin)
+
+    if (!isEditMode && !watch('createdById')) {
+      setValue('createdById', user.id)
+    }
+  }, [router, isEditMode, setValue, watch])
+
+  useEffect(() => {
+    if (!isAdmin) return
+
+    async function loadUsers() {
+      setIsLoadingUsers(true)
+      try {
+        const res = await fetch('/api/v1/users')
+        const json = await res.json()
+        if (json.success) {
+          setUsersList(json.data)
+        }
+      } catch (error) {
+        console.error('Failed to load users list:', error)
+      } finally {
+        setIsLoadingUsers(false)
+      }
+    }
+
+    loadUsers()
+  }, [isAdmin])
 
   useEffect(() => {
     async function loadOptions() {
@@ -167,6 +204,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
             paymentMethodId: data.paymentMethodId,
             date: new Date(data.date).toISOString(),
             description: data.description?.trim() || null,
+            createdById: isAdmin ? (data.createdById || user.id) : undefined,
           }),
         })
 
@@ -176,7 +214,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
           return
         }
 
-        router.push(`/transactions/${transactionId}`)
+        router.push(`/transactions/${transactionId}?currency=${currencyParam}`)
       } else {
         const formData = new FormData()
         formData.append('type', data.type)
@@ -185,7 +223,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
         formData.append('categoryId', data.categoryId)
         formData.append('paymentMethodId', data.paymentMethodId)
         formData.append('date', new Date(data.date).toISOString())
-        formData.append('createdById', user.id)
+        formData.append('createdById', isAdmin ? (data.createdById || user.id) : user.id)
         if (data.description?.trim()) {
           formData.append('description', data.description.trim())
         }
@@ -202,7 +240,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
           return
         }
 
-        router.push('/transactions')
+        router.push(`/transactions?currency=${currencyParam}`)
       }
     } catch (error) {
       console.error('Submit transaction error:', error)
@@ -335,6 +373,29 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
         </div>
       </div>
 
+      {isAdmin && (
+        <div className="space-y-2">
+          <label className="text-label-sm font-bold uppercase tracking-wider text-outline">
+            Creator User
+          </label>
+          <select
+            className="squircle w-full min-h-[44px] border border-outline-variant bg-surface-container-lowest px-4 py-3 font-body text-body-md outline-none focus:border-primary/40"
+            disabled={isLoadingUsers}
+            {...register('createdById')}
+          >
+            <option value="">Select User</option>
+            {usersList.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({u.role?.name || u.role?.slug || 'User'})
+              </option>
+            ))}
+          </select>
+          {errors.createdById && (
+            <p className="text-label-sm text-red-600">{errors.createdById.message}</p>
+          )}
+        </div>
+      )}
+
       <div className="space-y-2">
         <label className="text-label-sm font-bold uppercase tracking-wider text-outline">
           Description <span className="normal-case text-outline">(optional)</span>
@@ -365,7 +426,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
           variant="outline"
           className="w-full sm:w-auto sm:min-w-[160px]"
           disabled={isSubmitting}
-          onClick={() => isEditMode && transactionId ? router.push(`/transactions/${transactionId}`) : router.push('/transactions')}
+          onClick={() => isEditMode && transactionId ? router.push(`/transactions/${transactionId}?currency=${currencyParam}`) : router.push(`/transactions?currency=${currencyParam}`)}
         >
           Cancel
         </Button>

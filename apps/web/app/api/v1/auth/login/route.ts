@@ -19,7 +19,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const users = await prisma.user.findMany()
+    const users = await prisma.user.findMany({
+      include: { role: true },
+    })
 
     let authenticatedUser = null
     for (const user of users) {
@@ -49,7 +51,7 @@ export async function POST(request: NextRequest) {
           id: authenticatedUser.id,
           name: authenticatedUser.name,
           email: authenticatedUser.email,
-          role: authenticatedUser.roleId,
+          role: authenticatedUser.role.slug,
         },
       },
     })

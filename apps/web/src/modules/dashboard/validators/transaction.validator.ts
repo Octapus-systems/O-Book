@@ -13,6 +13,7 @@ export const transactionEntrySchema = z.object({
   paymentMethodId: z.string().min(1, 'Payment method is required'),
   date: z.string().min(1, 'Date is required'),
   description: z.string().optional(),
+  createdById: z.string().optional(),
 })
 
 export type TransactionEntryFormData = z.infer<typeof transactionEntrySchema>

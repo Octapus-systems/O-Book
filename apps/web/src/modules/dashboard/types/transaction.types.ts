@@ -20,6 +20,7 @@ export type Transaction = {
   description?: string | null
   comments?: Comment[]
   attachments?: Attachment[]
+  createdBy?: { id: string; name: string; email: string }
 }
 
 export type Comment = {

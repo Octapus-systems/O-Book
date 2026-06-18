@@ -2,6 +2,7 @@ import TransactionsPage from '@/modules/dashboard/pages/TransactionsPage'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export default async function Page() {
   const transactions = await prisma.transaction.findMany({
@@ -50,7 +51,7 @@ export default async function Page() {
         name: tx.cashbook.name,
         baseCurrency: tx.cashbook.baseCurrency,
       },
-      attachments: tx.attachments.map((att) => ({
+      attachments: tx.attachments.map((att: { id: string; fileName: string; filePath: string; fileSize: number; mimeType: string }) => ({
         id: att.id,
         fileName: att.fileName,
         filePath: att.filePath,

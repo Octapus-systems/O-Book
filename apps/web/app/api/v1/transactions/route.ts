@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       { success: true, data: withBalance.reverse() },
-      { headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' } }
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' } }
     )
   } catch (error) {
     console.error('Fetch transactions error:', error)

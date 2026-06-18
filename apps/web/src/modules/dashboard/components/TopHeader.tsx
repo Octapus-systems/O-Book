@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bell, Search, Wallet, Menu } from 'lucide-react'
+import { Bell, Search, Wallet, Menu, LogOut } from 'lucide-react'
 import { useSidebarStore } from '@/lib/store'
-import { getAuthUser, type AuthUser } from '@/lib/auth-store'
+import { getAuthUser, clearAuthUser, type AuthUser } from '@/lib/auth-store'
+import { useRouter } from 'next/navigation'
 
 function getInitials(name: string): string {
   return name
@@ -15,12 +16,18 @@ function getInitials(name: string): string {
 }
 
 export function TopHeader() {
+  const router = useRouter()
   const { toggleSidebar } = useSidebarStore()
   const [user, setUser] = useState<AuthUser | null>(null)
 
   useEffect(() => {
     setUser(getAuthUser())
   }, [])
+
+  const handleLogout = () => {
+    clearAuthUser()
+    router.replace('/')
+  }
 
   const displayName = user?.name ?? 'User'
   const initials = getInitials(displayName)
@@ -75,6 +82,16 @@ export function TopHeader() {
             {initials}
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-red-500/10 hover:text-red-600 ml-1 lg:ml-2"
+          aria-label="Log out"
+          title="Log out"
+        >
+          <LogOut className="h-5 w-5" />
+        </button>
       </div>
     </header>
   )

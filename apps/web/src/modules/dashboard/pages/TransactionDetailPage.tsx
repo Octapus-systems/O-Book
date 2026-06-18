@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Edit2, Trash2, Send, Clock, FileText, User, CreditCard, ExternalLink } from 'lucide-react'
 import type { Transaction } from '../types/transaction.types'
 import { mapApiTransactionToDisplay, type ApiTransaction } from '../utils/transaction.mapper'
-import { formatCurrencyAmount } from '../constants/currency'
+import { formatCurrencyAmount, DEFAULT_CURRENCY, type SupportedCurrency } from '../constants/currency'
 
 interface Comment {
   id: string
@@ -37,7 +37,9 @@ export default function TransactionDetailPage({
 }) {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const transactionId = params.id as string
+  const currencyParam = (searchParams.get('currency') as SupportedCurrency) || DEFAULT_CURRENCY
 
   const [transaction, setTransaction] = useState<Transaction | null>(() =>
     initialApiTransaction ? mapApiTransactionToDisplay(initialApiTransaction, 0) : null
@@ -122,7 +124,7 @@ export default function TransactionDetailPage({
           return
         }
 
-        router.push('/transactions')
+        router.push(`/transactions?currency=${currencyParam}&refresh=${Date.now()}`)
       } catch (err) {
         console.error('Delete transaction error:', err)
         alert('Failed to delete transaction')
@@ -143,7 +145,7 @@ export default function TransactionDetailPage({
       <div className="flex min-h-[400px] flex-col items-center justify-center gap-4">
         <div className="text-body-md text-red-700">{error || 'Transaction not found'}</div>
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push(`/transactions?currency=${currencyParam}`)}
           className="rounded-full bg-[#6D4AFF] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#8B6BFF] transition-colors"
         >
           Go Back
@@ -159,7 +161,7 @@ export default function TransactionDetailPage({
       {/* Header */}
       <div className="flex items-center justify-between">
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push(`/transactions?currency=${currencyParam}`)}
           className="flex items-center gap-2 text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -227,7 +229,7 @@ export default function TransactionDetailPage({
               Added By
             </div>
             <div className="text-sm font-medium text-on-surface">
-              Admin
+              {transaction.createdBy?.name || 'Unknown'}
             </div>
           </div>
 

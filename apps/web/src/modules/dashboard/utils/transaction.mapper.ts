@@ -81,6 +81,7 @@ export function mapApiTransactionToDisplay(tx: ApiTransaction, index = 0): Trans
         ? (typeof att.createdAt === 'string' ? att.createdAt : att.createdAt.toISOString())
         : undefined,
     })),
+    createdBy: tx.createdBy,
   }
 }
 

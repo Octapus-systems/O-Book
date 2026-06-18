@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { TransactionFilters } from '../components/TransactionFilters'
 import { TransactionTable } from '../components/TransactionTable'
 import { FloatingActionButton } from '../components/FloatingActionButton'
@@ -20,11 +20,14 @@ export default function TransactionsPage({
   initialApiTransactions?: ApiTransaction[]
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>(() =>
     initialApiTransactions.map((tx, index) => mapApiTransactionToDisplay(tx, index))
   )
-  const [selectedCurrency, setSelectedCurrency] = useState<SupportedCurrency>(DEFAULT_CURRENCY)
+  const [selectedCurrency, setSelectedCurrency] = useState<SupportedCurrency>(
+    (searchParams.get('currency') as SupportedCurrency) || DEFAULT_CURRENCY
+  )
   const [isLoading, setIsLoading] = useState(initialApiTransactions.length === 0)
   const [error, setError] = useState<string | null>(null)
   
@@ -42,17 +45,13 @@ export default function TransactionsPage({
 
   useEffect(() => {
     async function fetchTransactions() {
-      if (initialApiTransactions.length === 0) {
-        setIsLoading(true)
-      }
+      setIsLoading(true)
       setError(null)
       try {
         const response = await fetch('/api/v1/transactions')
         const result = await response.json()
         if (!response.ok || !result.success) {
-          if (initialApiTransactions.length === 0) {
-            setError(result.message || 'Failed to load transactions')
-          }
+          setError(result.message || 'Failed to load transactions')
           return
         }
         const mapped = (result.data as ApiTransaction[]).map((tx, index) =>
@@ -61,16 +60,24 @@ export default function TransactionsPage({
         setTransactions(mapped)
       } catch (err) {
         console.error('Fetch transactions error:', err)
-        if (initialApiTransactions.length === 0) {
-          setError('Failed to load transactions')
-        }
+        setError('Failed to load transactions')
       } finally {
         setIsLoading(false)
       }
     }
 
-    fetchTransactions()
-  }, [initialApiTransactions.length])
+    // Always fetch if refresh parameter is present
+    const refreshParam = searchParams.get('refresh')
+    if (refreshParam || initialApiTransactions.length === 0) {
+      fetchTransactions()
+      // Clean up the refresh parameter from URL
+      if (refreshParam) {
+        const newParams = new URLSearchParams(searchParams.toString())
+        newParams.delete('refresh')
+        router.replace(`/transactions?${newParams.toString()}`, { scroll: false })
+      }
+    }
+  }, [initialApiTransactions.length, searchParams, router])
 
   // Extract unique categories from transactions
   const categories = useMemo(() => {
@@ -144,6 +151,21 @@ export default function TransactionsPage({
     return filteredTransactions.slice(startIndex, endIndex)
   }, [filteredTransactions, currentPage, pageSize])
 
+  // Sync currency state with URL
+  useEffect(() => {
+    const currencyParam = searchParams.get('currency') as SupportedCurrency
+    if (currencyParam && currencyParam !== selectedCurrency) {
+      setSelectedCurrency(currencyParam)
+    }
+  }, [searchParams, selectedCurrency])
+
+  // Update URL when currency changes
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('currency', selectedCurrency)
+    router.replace(`/transactions?${params.toString()}`, { scroll: false })
+  }, [selectedCurrency, router, searchParams])
+
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
@@ -154,8 +176,10 @@ export default function TransactionsPage({
   }, [])
 
   const handleRowClick = useCallback((transaction: Transaction) => {
-    router.push(`/transactions/${transaction.id}`)
-  }, [router])
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('currency', transaction.currency)
+    router.push(`/transactions/${transaction.id}?${params.toString()}`)
+  }, [router, searchParams])
 
   return (
     <>
