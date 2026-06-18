@@ -22,6 +22,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Reports', href: '/reports', icon: BarChart3, implemented: true },
   { label: 'Activity Logs', href: '/activity-logs', icon: History, implemented: false },
   { label: 'Import/Export', href: '/import-export', icon: Import, implemented: false },
-  { label: 'Users', href: '/users', icon: Users, implemented: true },
+  { label: 'User & Category', href: '/users', icon: Users, implemented: true },
   { label: 'Settings', href: '/settings', icon: Settings, implemented: false },
 ]

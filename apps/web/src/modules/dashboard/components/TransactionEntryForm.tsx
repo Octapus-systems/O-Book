@@ -9,6 +9,7 @@ import { getAuthUser } from '@/lib/auth-store'
 import { TransactionTypeToggle } from './TransactionTypeToggle'
 import { CurrencyIcon } from './CurrencyIcon'
 import { TransactionFileUpload } from './TransactionFileUpload'
+import { X, Check } from 'lucide-react'
 import {
   transactionEntrySchema,
   type TransactionEntryFormData,
@@ -42,6 +43,18 @@ type TransactionEntryFormProps = {
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 
+const CATEGORY_COLORS = [
+  '#8B5CF6', // Violet
+  '#10B981', // Emerald
+  '#F43F5E', // Rose
+  '#F59E0B', // Amber
+  '#6366F1', // Indigo
+  '#3B82F6', // Blue
+  '#06B6D4', // Cyan
+  '#F97316', // Orange
+  '#6B7280', // Gray
+]
+
 function todayIsoDate(): string {
   return new Date().toISOString().split('T')[0]
 }
@@ -57,6 +70,14 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
   const [attachments, setAttachments] = useState<File[]>([])
   const [isLoadingOptions, setIsLoadingOptions] = useState(true)
   const [submitError, setSubmitError] = useState<string | null>(null)
+
+  // Inline category creation
+  const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [newCategoryColor, setNewCategoryColor] = useState(CATEGORY_COLORS[0])
+  const [newCategoryDescription, setNewCategoryDescription] = useState('')
+  const [isSavingCategory, setIsSavingCategory] = useState(false)
+  const [saveCategoryError, setSaveCategoryError] = useState<string | null>(null)
 
   const defaultValues = initialData ? {
     type: initialData.type,
@@ -319,7 +340,14 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
           <select
             className="squircle w-full min-h-[44px] border border-outline-variant bg-surface-container-lowest px-4 py-3 font-body text-body-md outline-none focus:border-primary/40"
             disabled={isLoadingOptions}
-            {...register('categoryId')}
+            {...register('categoryId', {
+              onChange: (e) => {
+                if (e.target.value === 'ADD_NEW_CATEGORY') {
+                  setValue('categoryId', '')
+                  setIsAddCategoryModalOpen(true)
+                }
+              }
+            })}
           >
             <option value="">
               {isLoadingOptions ? 'Loading categories...' : 'Select category'}
@@ -329,6 +357,11 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
                 {category.name}
               </option>
             ))}
+            {!isLoadingOptions && (
+              <option value="ADD_NEW_CATEGORY" className="text-primary font-semibold">
+                ➕ Add Category...
+              </option>
+            )}
           </select>
           {errors.categoryId && (
             <p className="text-label-sm text-red-600">{errors.categoryId.message}</p>
@@ -434,6 +467,141 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
           {isEditMode ? 'Update Entry' : 'Save Entry'}
         </Button>
       </div>
+
+      {/* Inline Category Creation Modal */}
+      {isAddCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setIsAddCategoryModalOpen(false)} />
+          <div className="relative z-10 w-full max-w-md glass-surface rim-light squircle p-6 shadow-xl text-left">
+            <div className="mb-5 flex items-center justify-between">
+              <h3 className="font-title text-title-md font-bold text-on-surface">
+                Create New Category
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsAddCategoryModalOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-outline transition hover:bg-surface-container-lowest hover:text-on-surface"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-label-sm font-medium text-outline">Category Name</label>
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="e.g. Sales, Rent, Marketing"
+                  required
+                  className="w-full squircle border border-outline-variant bg-surface-container-lowest px-4 py-2.5 text-sm text-on-surface outline-none placeholder:text-outline focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-label-sm font-medium text-outline">Category Type</label>
+                <div className="text-body-sm font-semibold p-2.5 rounded-xl border border-outline-variant bg-surface-container-low text-on-surface">
+                  {transactionType === 'CASH_IN' ? 'Cash In (Income)' : 'Cash Out (Expense)'}
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-label-sm font-medium text-outline">Description</label>
+                <textarea
+                  value={newCategoryDescription}
+                  onChange={(e) => setNewCategoryDescription(e.target.value)}
+                  placeholder="Brief details about category uses..."
+                  rows={2}
+                  className="w-full squircle border border-outline-variant bg-surface-container-lowest px-4 py-2.5 text-sm text-on-surface outline-none placeholder:text-outline focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-label-sm font-medium text-outline">Select Theme Color</label>
+                <div className="flex flex-wrap gap-2">
+                  {CATEGORY_COLORS.map((c) => {
+                    const active = newCategoryColor === c
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setNewCategoryColor(c)}
+                        className="group relative flex h-7 w-7 items-center justify-center rounded-full border border-black/10 transition hover:scale-110 active:scale-95"
+                        style={{ backgroundColor: c }}
+                        title={c}
+                      >
+                        {active && (
+                          <Check className="h-4 w-4 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {saveCategoryError && <p className="text-sm text-red-600">{saveCategoryError}</p>}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddCategoryModalOpen(false)}
+                  className="flex-1 squircle border border-outline-variant bg-surface-container-lowest px-4 py-2.5 text-sm font-medium text-on-surface transition hover:bg-primary-fixed/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingCategory}
+                  onClick={async () => {
+                    if (!newCategoryName.trim()) {
+                      setSaveCategoryError('Category name is required')
+                      return
+                    }
+                    setIsSavingCategory(true)
+                    setSaveCategoryError(null)
+                    try {
+                      const res = await fetch('/api/v1/categories', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          name: newCategoryName,
+                          type: transactionType,
+                          description: newCategoryDescription,
+                          color: newCategoryColor,
+                        }),
+                      })
+                      const json = await res.json()
+                      if (!res.ok || !json.success) {
+                        setSaveCategoryError(json.message || 'Something went wrong')
+                        return
+                      }
+
+                      // Successfully saved
+                      const newCat = json.data
+                      setCategories((prev) => [...prev, newCat])
+                      setValue('categoryId', newCat.id)
+                      
+                      // Reset and close
+                      setNewCategoryName('')
+                      setNewCategoryDescription('')
+                      setNewCategoryColor(CATEGORY_COLORS[0])
+                      setIsAddCategoryModalOpen(false)
+                    } catch {
+                      setSaveCategoryError('Network error')
+                    } finally {
+                      setIsSavingCategory(false)
+                    }
+                  }}
+                  className="flex-1 squircle bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+                >
+                  {isSavingCategory ? 'Saving…' : 'Add Category'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   )
 }
