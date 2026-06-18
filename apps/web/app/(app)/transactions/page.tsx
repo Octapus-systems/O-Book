@@ -18,7 +18,7 @@ export default async function Page() {
   })
 
   let runningBalance = 0
-  const serializedTransactions = transactions.map((tx) => {
+  const serializedTransactions = transactions.map((tx: any) => {
     const amount = Number(tx.amount)
     const signedAmount = tx.type === 'CASH_IN' ? amount : -amount
     runningBalance += signedAmount
