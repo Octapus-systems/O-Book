@@ -25,9 +25,13 @@ export default function TransactionsPage({
   const [transactions, setTransactions] = useState<Transaction[]>(() =>
     initialApiTransactions.map((tx, index) => mapApiTransactionToDisplay(tx, index))
   )
-  const [selectedCurrency, setSelectedCurrency] = useState<SupportedCurrency>(
-    (searchParams.get('currency') as SupportedCurrency) || DEFAULT_CURRENCY
-  )
+  const selectedCurrency = (searchParams.get('currency') as SupportedCurrency) || DEFAULT_CURRENCY
+
+  const handleCurrencyChange = useCallback((currency: SupportedCurrency) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('currency', currency)
+    router.replace(`/transactions?${params.toString()}`, { scroll: false })
+  }, [router, searchParams])
   const [isLoading, setIsLoading] = useState(initialApiTransactions.length === 0)
   const [error, setError] = useState<string | null>(null)
   
@@ -151,20 +155,7 @@ export default function TransactionsPage({
     return filteredTransactions.slice(startIndex, endIndex)
   }, [filteredTransactions, currentPage, pageSize])
 
-  // Sync currency state with URL
-  useEffect(() => {
-    const currencyParam = searchParams.get('currency') as SupportedCurrency
-    if (currencyParam && currencyParam !== selectedCurrency) {
-      setSelectedCurrency(currencyParam)
-    }
-  }, [searchParams, selectedCurrency])
 
-  // Update URL when currency changes
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('currency', selectedCurrency)
-    router.replace(`/transactions?${params.toString()}`, { scroll: false })
-  }, [selectedCurrency, router, searchParams])
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -187,7 +178,7 @@ export default function TransactionsPage({
         <TransactionStatsCard 
           transactions={transactions} 
           currency={selectedCurrency}
-          onCurrencyChange={setSelectedCurrency}
+          onCurrencyChange={handleCurrencyChange}
         />
         
         {/* Search Input */}
@@ -204,7 +195,7 @@ export default function TransactionsPage({
 
         <TransactionFilters 
           selectedCurrency={selectedCurrency}
-          onCurrencyChange={setSelectedCurrency}
+          onCurrencyChange={handleCurrencyChange}
           selectedDateRange={selectedDateRange}
           onDateRangeChange={setSelectedDateRange}
           selectedType={selectedType}
