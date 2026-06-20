@@ -235,7 +235,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
           return
         }
 
-        router.push(`/transactions/${transactionId}?currency=${currencyParam}`)
+        router.push(`/transactions/${transactionId}?currency=${data.currency}`)
       } else {
         const formData = new FormData()
         formData.append('type', data.type)
@@ -261,7 +261,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
           return
         }
 
-        router.push(`/transactions?currency=${currencyParam}`)
+        router.push(`/transactions?currency=${data.currency}`)
       }
     } catch (error) {
       console.error('Submit transaction error:', error)

@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo } from 'react'
-import { MessageCircle } from 'lucide-react'
+import { useMemo, useState, useEffect } from 'react'
+import { MoreVertical } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import type { Transaction, TransactionStatus } from '../types/transaction.types'
 import { formatCurrencyAmount } from '../constants/currency'
 import { cn } from '@/lib/utils'
@@ -53,15 +54,44 @@ function formatAmount(amount: number, currency: string) {
   return formatCurrencyAmount(amount, currency, { showSign: true })
 }
 
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+}
+
 export function TransactionTable({ transactions, selectedId, onSelect, onRowClick }: TransactionTableProps) {
-  // Calculate running balance per currency
-  const transactionsWithBalance = useMemo(() => {
-    let runningBalance = 0
-    return transactions.map((tx) => {
-      runningBalance += tx.amount
-      return { ...tx, balance: runningBalance }
-    })
-  }, [transactions])
+  const router = useRouter()
+  const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const handleClose = () => setActiveDropdownId(null)
+    window.addEventListener('click', handleClose)
+    return () => window.removeEventListener('click', handleClose)
+  }, [])
+
+  const handleDelete = async (txId: string, currency: string) => {
+    if (confirm('Are you sure you want to delete this transaction? This action cannot be undone.')) {
+      try {
+        const response = await fetch(`/api/v1/transactions/${txId}`, {
+          method: 'DELETE',
+        })
+        const result = await response.json()
+        if (!response.ok || !result.success) {
+          alert(result.message || 'Failed to delete transaction')
+          return
+        }
+        router.push(`/transactions?currency=${currency}&refresh=${Date.now()}`)
+      } catch (err) {
+        console.error('Delete error:', err)
+        alert('Failed to delete transaction')
+      }
+    }
+  }
 
   return (
     <div className="glass-surface rim-light squircle overflow-hidden shadow-xl">
@@ -69,20 +99,21 @@ export function TransactionTable({ transactions, selectedId, onSelect, onRowClic
         <table className="w-full min-w-[600px] border-collapse text-left sm:min-w-0">
           <thead className="border-b border-primary/10 bg-primary-fixed/20">
             <tr>
-              {['Entity & Date', 'Category', 'Amount', 'Balance', ''].map((col) => (
+              {['Description & User', 'Category', 'Amount', 'Balance', 'Action'].map((col) => (
                 <th
                   key={col}
                   className="px-4 py-3 text-label-sm font-bold uppercase tracking-wider text-outline sm:px-6 sm:py-4"
                 >
-                  {col === '' ? <MessageCircle className="h-4 w-4" /> : col}
+                  {col}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant/30">
-            {transactionsWithBalance.map((tx: Transaction) => {
+            {transactions.map((tx: Transaction) => {
               const isSelected = tx.id === selectedId
-              const status = STATUS_STYLES[tx.status as TransactionStatus]
+              const creatorName = tx.createdBy?.name || 'Unknown'
+              const creatorInitials = getInitials(creatorName)
 
               return (
                 <tr
@@ -100,16 +131,17 @@ export function TransactionTable({ transactions, selectedId, onSelect, onRowClic
                     <div className="flex items-center gap-3">
                       <div
                         className={cn(
-                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/20 text-xs font-bold sm:h-10 sm:w-10 sm:text-sm',
-                          tx.avatar?.color
+                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/20 text-xs font-bold sm:h-10 sm:w-10 sm:text-sm bg-primary-fixed text-primary'
                         )}
                       >
-                        {tx.avatar?.initials}
+                        {creatorInitials}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-body text-body-md font-bold text-on-surface truncate sm:text-body-lg">{tx.entity}</p>
+                        <p className="font-body text-body-md font-bold text-on-surface truncate sm:text-body-lg">
+                          {tx.description || '-'}
+                        </p>
                         <p className="text-label-sm text-outline sm:text-label-sm">
-                          {tx.date} • {tx.time}
+                          Added by {creatorName} • {tx.date} • {tx.time}
                         </p>
                       </div>
                     </div>
@@ -142,15 +174,44 @@ export function TransactionTable({ transactions, selectedId, onSelect, onRowClic
                       {formatAmount(tx.balance, tx.currency)}
                     </span>
                   </td>
-                  <td className="px-4 py-4 sm:px-6 sm:py-5">
+                  <td className="px-4 py-4 sm:px-6 sm:py-5 relative">
                     <button
                       type="button"
-                      className="text-outline transition-colors hover:text-primary"
-                      aria-label="Comments"
-                      onClick={(e) => e.stopPropagation()}
+                      className="text-outline transition-colors hover:text-primary p-2 rounded-full hover:bg-primary-fixed/10"
+                      aria-label="Actions"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setActiveDropdownId(activeDropdownId === tx.id ? null : tx.id)
+                      }}
                     >
-                      <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                      <MoreVertical className="h-4 w-4 sm:h-5 sm:w-5" />
                     </button>
+                    {activeDropdownId === tx.id && (
+                      <div className="absolute right-4 mt-1 z-50 w-32 rounded-2xl border border-outline-variant bg-surface-container-lowest py-2 shadow-xl">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            router.push(`/transactions/${tx.id}/edit?currency=${tx.currency}`)
+                            setActiveDropdownId(null)
+                          }}
+                          className="flex w-full items-center px-4 py-2 font-body text-body-md text-on-surface hover:bg-primary-fixed/20 text-left transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(tx.id, tx.currency)
+                            setActiveDropdownId(null)
+                          }}
+                          className="flex w-full items-center px-4 py-2 font-body text-body-md text-red-600 hover:bg-red-500/10 text-left transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               )
