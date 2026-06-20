@@ -324,7 +324,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
   const amountVariant = transactionType === 'CASH_IN' ? 'income' : 'expense'
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+    <form onSubmit={handleSubmit(onSubmit)} className="min-w-0 w-full space-y-8">
       <TransactionTypeToggle value={transactionType} onChange={handleTypeChange} />
 
       <div className="grid gap-6 lg:grid-cols-[220px_1fr] lg:items-start">

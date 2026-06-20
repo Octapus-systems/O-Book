@@ -23,12 +23,12 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   }, [setMobile])
 
   return (
-    <div className="dashboard-canvas relative text-on-surface">
+    <div className="dashboard-canvas relative text-on-surface overflow-x-hidden">
       <AppBackground />
       <Sidebar />
       <TopHeader />
       <main
-        className={`relative z-10 min-h-[calc(100vh-5rem)] p-4 transition-all duration-300 lg:mt-20 lg:p-8 ${
+        className={`relative z-10 min-h-[calc(100vh-5rem)] w-full p-4 transition-all duration-300 mt-20 lg:p-8 ${
           isOpen ? 'lg:ml-72' : 'lg:ml-0'
         }`}
       >

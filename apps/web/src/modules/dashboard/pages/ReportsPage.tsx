@@ -112,7 +112,7 @@ function BalanceChart({ data }: { data: DayPoint[] }) {
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
-        className="w-full"
+        className="w-full min-w-[600px]"
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setTooltip(null)}
       >
@@ -218,7 +218,7 @@ function CashFlowChart({ data }: { data: DayPoint[] }) {
 
   return (
     <div className="w-full overflow-x-auto">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[600px]">
         {ticks.map((t, i) => (
           <g key={i}>
             <line x1={padX} y1={t.y} x2={W - padX} y2={t.y} stroke="rgba(109,74,255,0.08)" strokeWidth="1" />
@@ -407,19 +407,19 @@ export default function ReportsPage() {
         </select>
 
         {/* Date range */}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto justify-between sm:justify-start">
           <input
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="squircle border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none"
+            className="squircle border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none flex-1 min-w-0 sm:flex-initial"
           />
-          <span className="text-outline">—</span>
+          <span className="text-outline shrink-0">—</span>
           <input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="squircle border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none"
+            className="squircle border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none flex-1 min-w-0 sm:flex-initial"
           />
         </div>
       </div>
