@@ -65,11 +65,14 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
   const currencyParam = (searchParams.get('currency') as SupportedCurrency) || DEFAULT_CURRENCY
   const isEditMode = !!transactionId
   const [transactionType, setTransactionType] = useState<TransactionType>(initialData?.type || initialType)
+  const [prevType, setPrevType] = useState<TransactionType>(initialData?.type || initialType)
   const [categories, setCategories] = useState<CategoryOption[]>([])
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([])
   const [attachments, setAttachments] = useState<File[]>([])
   const [isLoadingOptions, setIsLoadingOptions] = useState(true)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [shouldAddNew, setShouldAddNew] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   // Inline category creation
   const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false)
@@ -181,9 +184,36 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
   }, [transactionType])
 
   useEffect(() => {
+    if (isEditMode && initialData) {
+      if (initialData.categoryId && categories.some(c => c.id === initialData.categoryId)) {
+        setValue('categoryId', initialData.categoryId)
+      }
+    }
+  }, [categories, isEditMode, initialData, setValue])
+
+  useEffect(() => {
+    if (isEditMode && initialData) {
+      if (initialData.paymentMethodId && paymentMethods.some(pm => pm.id === initialData.paymentMethodId)) {
+        setValue('paymentMethodId', initialData.paymentMethodId)
+      }
+    }
+  }, [paymentMethods, isEditMode, initialData, setValue])
+
+  useEffect(() => {
+    if (isEditMode && initialData) {
+      if (initialData.createdById && usersList.some(u => u.id === initialData.createdById)) {
+        setValue('createdById', initialData.createdById)
+      }
+    }
+  }, [usersList, isEditMode, initialData, setValue])
+
+  useEffect(() => {
     setValue('type', transactionType)
-    setValue('categoryId', '')
-  }, [transactionType, setValue])
+    if (transactionType !== prevType) {
+      setValue('categoryId', '')
+      setPrevType(transactionType)
+    }
+  }, [transactionType, prevType, setValue])
 
   const handleTypeChange = (type: TransactionType) => {
     setTransactionType(type)
@@ -200,6 +230,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
 
   const onSubmit = async (data: TransactionEntryFormData) => {
     setSubmitError(null)
+    setSuccessMessage(null)
     const user = getAuthUser()
     if (!user) {
       router.replace('/')
@@ -261,7 +292,28 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
           return
         }
 
-        router.push(`/transactions?currency=${data.currency}`)
+        if (shouldAddNew) {
+          reset({
+            type: data.type,
+            currency: data.currency,
+            amount: '',
+            categoryId: '',
+            paymentMethodId: '',
+            date: todayIsoDate(),
+            description: '',
+            createdById: isAdmin ? data.createdById : user.id,
+          })
+          setAttachments([])
+          setSuccessMessage('Entry saved successfully! Add new entry below.')
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+          
+          // Automatically clear success message after 5 seconds
+          setTimeout(() => {
+            setSuccessMessage(null)
+          }, 5000)
+        } else {
+          router.push(`/transactions?currency=${data.currency}`)
+        }
       }
     } catch (error) {
       console.error('Submit transaction error:', error)
@@ -453,6 +505,12 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
         </p>
       )}
 
+      {successMessage && (
+        <p className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-label-sm text-green-700">
+          {successMessage}
+        </p>
+      )}
+
       <div className="flex flex-col gap-3 border-t border-primary/10 pt-6 sm:flex-row sm:justify-end">
         <Button
           type="button"
@@ -463,7 +521,23 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
         >
           Cancel
         </Button>
-        <Button type="submit" className="w-full sm:w-auto sm:min-w-[200px]" isLoading={isSubmitting}>
+        {!isEditMode && (
+          <Button
+            type="submit"
+            variant="outline"
+            className="w-full sm:w-auto sm:min-w-[200px]"
+            isLoading={isSubmitting && shouldAddNew}
+            onClick={() => setShouldAddNew(true)}
+          >
+            Save & Add New
+          </Button>
+        )}
+        <Button
+          type="submit"
+          className="w-full sm:w-auto sm:min-w-[200px]"
+          isLoading={isSubmitting && !shouldAddNew}
+          onClick={() => setShouldAddNew(false)}
+        >
           {isEditMode ? 'Update Entry' : 'Save Entry'}
         </Button>
       </div>
