@@ -42,10 +42,31 @@ export default function TransactionsPage({
   const [selectedDateRange, setSelectedDateRange] = useState<DateRangeOption>('all-time')
   const [selectedType, setSelectedType] = useState<TransactionType>('all')
   const [selectedCategory, setSelectedCategory] = useState('all')
+  const [selectedUser, setSelectedUser] = useState('all')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  
+  // Users list state
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([])
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
+
+  useEffect(() => {
+    async function fetchUsers() {
+      try {
+        const response = await fetch('/api/v1/users')
+        const result = await response.json()
+        if (response.ok && result.success) {
+          setUsers(result.data)
+        }
+      } catch (err) {
+        console.error('Fetch users error:', err)
+      }
+    }
+    fetchUsers()
+  }, [])
 
   useEffect(() => {
     async function fetchTransactions() {
@@ -89,12 +110,28 @@ export default function TransactionsPage({
     return Array.from(uniqueCategories).filter(Boolean)
   }, [transactions])
 
-  // Filter transactions based on all criteria
-  const filteredTransactions = useMemo(() => {
-    let filtered = transactions
+  // 1. Filter by currency and calculate running balance chronologically on the full currency transactions list
+  const currencyTransactionsWithBalance = useMemo(() => {
+    // Filter only by currency first
+    const currencyTx = transactions.filter((tx) => tx.currency === selectedCurrency)
+    
+    // Sort oldest first (we can just reverse the original array, because the API returns newest first)
+    const oldestFirst = [...currencyTx].reverse()
+    
+    // Calculate chronological running balance
+    let runningBalance = 0
+    const calculated = oldestFirst.map((tx) => {
+      runningBalance += tx.amount
+      return { ...tx, balance: runningBalance }
+    })
+    
+    // Reverse back to newest first
+    return calculated.reverse()
+  }, [transactions, selectedCurrency])
 
-    // Filter by currency
-    filtered = filtered.filter((tx) => tx.currency === selectedCurrency)
+  // 2. Filter the currency transactions based on other filter criteria
+  const filteredTransactions = useMemo(() => {
+    let filtered = currencyTransactionsWithBalance
 
     // Filter by search query
     if (searchQuery.trim()) {
@@ -104,6 +141,13 @@ export default function TransactionsPage({
           tx.entity.toLowerCase().includes(query) ||
           tx.category.toLowerCase().includes(query) ||
           tx.description?.toLowerCase().includes(query)
+      )
+    }
+
+    // Filter by user
+    if (selectedUser !== 'all') {
+      filtered = filtered.filter(
+        (tx) => tx.createdBy?.id === selectedUser || tx.createdBy?.name === selectedUser
       )
     }
 
@@ -142,10 +186,21 @@ export default function TransactionsPage({
         const txDate = new Date(tx.date)
         return txDate >= thirtyDaysAgo
       })
+    } else if (selectedDateRange === 'custom') {
+      if (startDate) {
+        const start = new Date(startDate)
+        start.setHours(0, 0, 0, 0)
+        filtered = filtered.filter((tx) => new Date(tx.date) >= start)
+      }
+      if (endDate) {
+        const end = new Date(endDate)
+        end.setHours(23, 59, 59, 999)
+        filtered = filtered.filter((tx) => new Date(tx.date) <= end)
+      }
     }
 
     return filtered
-  }, [transactions, selectedCurrency, searchQuery, selectedType, selectedCategory, selectedDateRange])
+  }, [currencyTransactionsWithBalance, searchQuery, selectedUser, selectedType, selectedCategory, selectedDateRange, startDate, endDate])
 
   // Pagination
   const totalPages = Math.ceil(filteredTransactions.length / pageSize)
@@ -155,12 +210,10 @@ export default function TransactionsPage({
     return filteredTransactions.slice(startIndex, endIndex)
   }, [filteredTransactions, currentPage, pageSize])
 
-
-
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchQuery, selectedType, selectedCategory, selectedDateRange, selectedCurrency, pageSize])
+  }, [searchQuery, selectedType, selectedCategory, selectedDateRange, selectedCurrency, selectedUser, startDate, endDate, pageSize])
 
   const handleSearchChange = useCallback((value: string) => {
     setSearchQuery(value)
@@ -203,6 +256,13 @@ export default function TransactionsPage({
           selectedCategory={selectedCategory}
           onCategoryChange={setSelectedCategory}
           categories={categories}
+          users={users}
+          selectedUser={selectedUser}
+          onUserChange={setSelectedUser}
+          startDate={startDate}
+          endDate={endDate}
+          onStartDateChange={setStartDate}
+          onEndDateChange={setEndDate}
         />
 
         {isLoading ? (

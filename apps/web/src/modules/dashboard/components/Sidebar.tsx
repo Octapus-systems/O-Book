@@ -14,11 +14,22 @@ export function Sidebar() {
   const router = useRouter()
   const { isOpen, closeSidebar, isMobile } = useSidebarStore()
   const [isAdmin, setIsAdmin] = useState(false)
+  const [currentCurrency, setCurrentCurrency] = useState('AED')
 
   useEffect(() => {
     const user = getAuthUser()
     setIsAdmin(user?.role === 'ADMIN')
   }, [])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const cur = params.get('currency')
+      if (cur) {
+        setCurrentCurrency(cur)
+      }
+    }
+  }, [pathname])
 
   // Close sidebar on route change on mobile
   useEffect(() => {
@@ -105,7 +116,7 @@ export function Sidebar() {
             <button
               type="button"
               onClick={() => {
-                router.push('/transactions/new')
+                router.push(`/transactions/new?currency=${currentCurrency}`)
                 if (isMobile) closeSidebar()
               }}
               className="shadow-glow-primary rim-light flex w-full items-center justify-center gap-2 squircle bg-primary-container py-4 font-title text-title-md text-on-primary-container transition-all duration-300 hover:shadow-lg active:scale-95"

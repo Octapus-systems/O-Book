@@ -14,6 +14,13 @@ interface TransactionFiltersProps {
   selectedCategory: string
   onCategoryChange: (category: string) => void
   categories: string[]
+  users: Array<{ id: string; name: string }>
+  selectedUser: string
+  onUserChange: (userId: string) => void
+  startDate: string
+  endDate: string
+  onStartDateChange: (date: string) => void
+  onEndDateChange: (date: string) => void
 }
 
 const DATE_RANGE_LABELS: Record<DateRangeOption, string> = {
@@ -40,16 +47,25 @@ export function TransactionFilters({
   selectedCategory,
   onCategoryChange,
   categories,
+  users,
+  selectedUser,
+  onUserChange,
+  startDate,
+  endDate,
+  onStartDateChange,
+  onEndDateChange,
 }: TransactionFiltersProps) {
+  const sortedUsers = [...users].sort((a, b) => a.name.localeCompare(b.name))
+
   return (
     <div className="glass-surface rim-light squircle flex flex-col gap-4 p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-end sm:gap-4 sm:p-6">
       <div className="flex min-w-[140px] flex-1 flex-col gap-1.5 sm:min-w-[150px]">
         <label className="text-label-sm font-bold uppercase tracking-wider text-outline">
           Date Range
         </label>
-        <div className="relative">
+        <div className="relative w-full">
           <select
-            className="squircle appearance-none border border-outline-variant bg-surface-container-lowest px-3 py-2.5 pr-8 font-body text-body-md outline-none sm:px-4"
+            className="w-full squircle appearance-none border border-outline-variant bg-surface-container-lowest px-3 py-2.5 pr-8 font-body text-body-md outline-none sm:px-4"
             value={selectedDateRange}
             onChange={(e) => onDateRangeChange(e.target.value as DateRangeOption)}
           >
@@ -63,13 +79,40 @@ export function TransactionFilters({
         </div>
       </div>
 
+      {selectedDateRange === 'custom' && (
+        <>
+          <div className="flex min-w-[140px] flex-1 flex-col gap-1.5 sm:min-w-[150px]">
+            <label className="text-label-sm font-bold uppercase tracking-wider text-outline">
+              Start Date
+            </label>
+            <input
+              type="date"
+              className="w-full squircle border border-outline-variant bg-surface-container-lowest px-3 py-2.5 font-body text-body-md outline-none sm:px-4"
+              value={startDate}
+              onChange={(e) => onStartDateChange(e.target.value)}
+            />
+          </div>
+          <div className="flex min-w-[140px] flex-1 flex-col gap-1.5 sm:min-w-[150px]">
+            <label className="text-label-sm font-bold uppercase tracking-wider text-outline">
+              End Date
+            </label>
+            <input
+              type="date"
+              className="w-full squircle border border-outline-variant bg-surface-container-lowest px-3 py-2.5 font-body text-body-md outline-none sm:px-4"
+              value={endDate}
+              onChange={(e) => onEndDateChange(e.target.value)}
+            />
+          </div>
+        </>
+      )}
+
       <div className="flex min-w-[140px] flex-1 flex-col gap-1.5 sm:min-w-[150px]">
         <label className="text-label-sm font-bold uppercase tracking-wider text-outline">
           Currency
         </label>
-        <div className="relative">
+        <div className="relative w-full">
           <select
-            className="squircle appearance-none border border-outline-variant bg-surface-container-lowest px-3 py-2.5 pr-8 font-body text-body-md outline-none sm:px-4"
+            className="w-full squircle appearance-none border border-outline-variant bg-surface-container-lowest px-3 py-2.5 pr-8 font-body text-body-md outline-none sm:px-4"
             value={selectedCurrency}
             onChange={(e) => onCurrencyChange(e.target.value as SupportedCurrency)}
           >
@@ -87,9 +130,9 @@ export function TransactionFilters({
         <label className="text-label-sm font-bold uppercase tracking-wider text-outline">
           Type
         </label>
-        <div className="relative">
+        <div className="relative w-full">
           <select
-            className="squircle appearance-none border border-outline-variant bg-surface-container-lowest px-3 py-2.5 pr-8 font-body text-body-md outline-none sm:px-4"
+            className="w-full squircle appearance-none border border-outline-variant bg-surface-container-lowest px-3 py-2.5 pr-8 font-body text-body-md outline-none sm:px-4"
             value={selectedType}
             onChange={(e) => onTypeChange(e.target.value as TransactionType)}
           >
@@ -107,9 +150,9 @@ export function TransactionFilters({
         <label className="text-label-sm font-bold uppercase tracking-wider text-outline">
           Category
         </label>
-        <div className="relative">
+        <div className="relative w-full">
           <select
-            className="squircle appearance-none border border-outline-variant bg-surface-container-lowest px-3 py-2.5 pr-8 font-body text-body-md outline-none sm:px-4"
+            className="w-full squircle appearance-none border border-outline-variant bg-surface-container-lowest px-3 py-2.5 pr-8 font-body text-body-md outline-none sm:px-4"
             value={selectedCategory}
             onChange={(e) => onCategoryChange(e.target.value)}
           >
@@ -117,6 +160,27 @@ export function TransactionFilters({
             {categories.map((category) => (
               <option key={category} value={category}>
                 {category}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
+        </div>
+      </div>
+
+      <div className="flex min-w-[140px] flex-1 flex-col gap-1.5 sm:min-w-[150px]">
+        <label className="text-label-sm font-bold uppercase tracking-wider text-outline">
+          User
+        </label>
+        <div className="relative w-full">
+          <select
+            className="w-full squircle appearance-none border border-outline-variant bg-surface-container-lowest px-3 py-2.5 pr-8 font-body text-body-md outline-none sm:px-4"
+            value={selectedUser}
+            onChange={(e) => onUserChange(e.target.value)}
+          >
+            <option value="all">All Users</option>
+            {sortedUsers.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name}
               </option>
             ))}
           </select>
