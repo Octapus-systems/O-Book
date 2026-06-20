@@ -98,7 +98,7 @@ export default function EditTransactionPage() {
         </div>
       </div>
 
-      <div className="glass-surface rim-light squircle w-full p-6 shadow-xl sm:p-8 lg:p-10">
+      <div className="glass-surface rim-light squircle w-full max-w-full overflow-hidden p-6 shadow-xl sm:p-8 lg:p-10">
         <TransactionEntryForm
           transactionId={transactionId}
           initialData={initialData}

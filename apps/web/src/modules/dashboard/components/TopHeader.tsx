@@ -43,7 +43,7 @@ export function TopHeader() {
           <Menu className="h-6 w-6" />
         </button>
 
-        <div className="relative w-full max-w-md">
+        <div className="relative hidden w-full max-w-md md:block">
           <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
           <input
             type="text"
@@ -56,14 +56,14 @@ export function TopHeader() {
       <div className="flex items-center gap-2 lg:gap-4">
         <button
           type="button"
-          className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-primary-fixed/20 hover:text-primary"
+          className="hidden sm:flex rounded-full p-2 text-on-surface-variant transition-colors hover:bg-primary-fixed/20 hover:text-primary"
           aria-label="Notifications"
         >
           <Bell className="h-5 w-5" />
         </button>
         <button
           type="button"
-          className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-primary-fixed/20 hover:text-primary"
+          className="hidden sm:flex rounded-full p-2 text-on-surface-variant transition-colors hover:bg-primary-fixed/20 hover:text-primary"
           aria-label="Wallet"
         >
           <Wallet className="h-5 w-5" />
