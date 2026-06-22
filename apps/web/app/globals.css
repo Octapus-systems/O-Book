@@ -13,8 +13,14 @@
     --text-on-card-muted: #888888;
   }
 
+  html {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
   body {
     @apply font-geist antialiased min-h-screen overflow-x-hidden text-on-card-primary;
+    max-width: 100vw;
   }
 
   * {
