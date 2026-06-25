@@ -9,7 +9,7 @@ import { FloatingActionButton } from '../components/FloatingActionButton'
 import { TransactionStatsCard } from '../components/TransactionStatsCard'
 import type { Transaction } from '../types/transaction.types'
 import { mapApiTransactionToDisplay, type ApiTransaction } from '../utils/transaction.mapper'
-import { DEFAULT_CURRENCY, type SupportedCurrency } from '../constants/currency'
+import { DEFAULT_CURRENCY, type SupportedCurrency, formatCurrencyAmount } from '../constants/currency'
 
 type DateRangeOption = 'all-time' | 'today' | 'week' | 'last-30-days' | 'custom'
 type TransactionType = 'all' | 'cash-in' | 'cash-out'
@@ -34,6 +34,7 @@ export default function TransactionsPage({
   }, [router, searchParams])
   const [isLoading, setIsLoading] = useState(initialApiTransactions.length === 0)
   const [error, setError] = useState<string | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
   
   // Search state
   const [searchQuery, setSearchQuery] = useState('')
@@ -225,6 +226,233 @@ export default function TransactionsPage({
     router.push(`/transactions/${transaction.id}?${params.toString()}`)
   }, [router, searchParams])
 
+  const handleExport = useCallback(async () => {
+    setIsExporting(true)
+    try {
+      // 1. Fetch complete dataset from the backend
+      const response = await fetch('/api/v1/transactions')
+      const result = await response.json()
+      if (!response.ok || !result.success) {
+        alert(result.message || 'Failed to fetch transactions for export')
+        return
+      }
+      
+      // 2. Map the transactions
+      const allTx = (result.data as ApiTransaction[]).map((tx, index) =>
+        mapApiTransactionToDisplay(tx, index)
+      )
+      
+      // 3. Filter by currency and calculate running balance
+      const currencyTx = allTx.filter((tx) => tx.currency === selectedCurrency)
+      const oldestFirst = [...currencyTx].reverse()
+      let runningBalance = 0
+      const calculated = oldestFirst.map((tx) => {
+        runningBalance += tx.amount
+        return { ...tx, balance: runningBalance }
+      })
+      let filtered = calculated.reverse()
+      
+      // 4. Filter by search query
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase()
+        filtered = filtered.filter(
+          (tx) =>
+            tx.entity.toLowerCase().includes(query) ||
+            tx.category.toLowerCase().includes(query) ||
+            tx.description?.toLowerCase().includes(query)
+        )
+      }
+      
+      // 5. Filter by user
+      if (selectedUser !== 'all') {
+        filtered = filtered.filter(
+          (tx) => tx.createdBy?.id === selectedUser || tx.createdBy?.name === selectedUser
+        )
+      }
+      
+      // 6. Filter by type
+      if (selectedType === 'cash-in') {
+        filtered = filtered.filter((tx) => tx.amount >= 0)
+      } else if (selectedType === 'cash-out') {
+        filtered = filtered.filter((tx) => tx.amount < 0)
+      }
+      
+      // 7. Filter by category
+      if (selectedCategory !== 'all') {
+        filtered = filtered.filter((tx) => tx.category === selectedCategory)
+      }
+      
+      // 8. Filter by date range
+      const now = new Date()
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      
+      if (selectedDateRange === 'today') {
+        filtered = filtered.filter((tx) => {
+          const txDate = new Date(tx.date)
+          return txDate >= today
+        })
+      } else if (selectedDateRange === 'week') {
+        const weekAgo = new Date(today)
+        weekAgo.setDate(weekAgo.getDate() - 7)
+        filtered = filtered.filter((tx) => {
+          const txDate = new Date(tx.date)
+          return txDate >= weekAgo
+        })
+      } else if (selectedDateRange === 'last-30-days') {
+        const thirtyDaysAgo = new Date(today)
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+        filtered = filtered.filter((tx) => {
+          const txDate = new Date(tx.date)
+          return txDate >= thirtyDaysAgo
+        })
+      } else if (selectedDateRange === 'custom') {
+        if (startDate) {
+          const start = new Date(startDate)
+          start.setHours(0, 0, 0, 0)
+          filtered = filtered.filter((tx) => new Date(tx.date) >= start)
+        }
+        if (endDate) {
+          const end = new Date(endDate)
+          end.setHours(23, 59, 59, 999)
+          filtered = filtered.filter((tx) => new Date(tx.date) <= end)
+        }
+      }
+      
+      // 9. If no transactions match, show message
+      if (filtered.length === 0) {
+        alert('No transactions available to export.')
+        return
+      }
+      
+      // 10. Generate Excel and download
+      const ExcelJS = await import('exceljs')
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Transactions')
+      
+      // Freeze header row (first 4 rows)
+      worksheet.views = [
+        { state: 'frozen', ySplit: 4 }
+      ]
+      
+      // Add Title
+      worksheet.addRow(['Transaction Report'])
+      worksheet.getCell('A1').font = { name: 'Arial', size: 16, bold: true }
+      
+      // Add Export Date and Time
+      const exportDate = new Date()
+      const formattedDateTime = exportDate.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      })
+      worksheet.addRow([`Exported on: ${formattedDateTime}`])
+      
+      // Add blank row
+      worksheet.addRow([])
+      
+      // Add Column Headers
+      const headers = ['Description & User', 'Category', 'Amount', 'Balance', 'Status']
+      const headerRow = worksheet.addRow(headers)
+      headerRow.eachCell((cell) => {
+        cell.font = { name: 'Arial', size: 11, bold: true }
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' },
+        }
+        cell.alignment = { vertical: 'middle', horizontal: 'left' }
+        cell.border = {
+          bottom: { style: 'thin' },
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' },
+        }
+      })
+      
+      // Add Data Rows
+      filtered.forEach((tx) => {
+        const descUser = `${tx.description || '-'}\nAdded by ${tx.createdBy?.name || 'Unknown'} • ${tx.date} • ${tx.time}`
+        const category = tx.category
+        
+        const amountStr = `${formatCurrencyAmount(tx.amount, tx.currency, { showSign: true })}\n${tx.currency}`
+        const balanceStr = formatCurrencyAmount(tx.balance, tx.currency, { showSign: true })
+        
+        const statusLabel = tx.status === 'approved' ? 'Approved' : tx.status === 'pending' ? 'Pending' : 'Flagged'
+        
+        const row = worksheet.addRow([
+          descUser,
+          category,
+          amountStr,
+          balanceStr,
+          statusLabel
+        ])
+        
+        // Wrap text and vertical alignment top
+        row.getCell(1).alignment = { wrapText: true, vertical: 'top', horizontal: 'left' }
+        row.getCell(2).alignment = { vertical: 'top', horizontal: 'left' }
+        row.getCell(3).alignment = { wrapText: true, vertical: 'top', horizontal: 'left' }
+        row.getCell(4).alignment = { vertical: 'top', horizontal: 'left' }
+        row.getCell(5).alignment = { vertical: 'top', horizontal: 'left' }
+      })
+      
+      // Auto-fit columns
+      worksheet.columns.forEach((column) => {
+        let maxLen = 0
+        column.eachCell?.({ includeEmpty: true }, (cell) => {
+          if (Number(cell.row) <= 3) return
+          if (cell.value) {
+            const lines = cell.value.toString().split('\n')
+            lines.forEach((line) => {
+              if (line.length > maxLen) {
+                maxLen = line.length
+              }
+            })
+          }
+        })
+        column.width = Math.max(maxLen + 4, 15)
+      })
+      
+      // Write to buffer
+      const buffer = await workbook.xlsx.writeBuffer()
+      
+      // Download
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = window.URL.createObjectURL(blob)
+      
+      const year = exportDate.getFullYear()
+      const month = String(exportDate.getMonth() + 1).padStart(2, '0')
+      const day = String(exportDate.getDate()).padStart(2, '0')
+      const hours = String(exportDate.getHours()).padStart(2, '0')
+      const minutes = String(exportDate.getMinutes()).padStart(2, '0')
+      const filename = `transactions_${year}-${month}-${day}_${hours}-${minutes}.xlsx`
+      
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      window.URL.revokeObjectURL(url)
+      
+    } catch (err) {
+      console.error('Export error:', err)
+      alert('An error occurred while exporting transactions.')
+    } finally {
+      setIsExporting(false)
+    }
+  }, [
+    selectedCurrency,
+    searchQuery,
+    selectedUser,
+    selectedType,
+    selectedCategory,
+    selectedDateRange,
+    startDate,
+    endDate
+  ])
+
   return (
     <>
       <div className="min-w-0 flex-1 space-y-6">
@@ -232,6 +460,8 @@ export default function TransactionsPage({
           transactions={transactions} 
           currency={selectedCurrency}
           onCurrencyChange={handleCurrencyChange}
+          onExport={handleExport}
+          isExporting={isExporting}
         />
         
         {/* Search Input */}

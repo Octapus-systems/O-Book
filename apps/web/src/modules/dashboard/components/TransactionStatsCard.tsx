@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { Download } from 'lucide-react'
 import type { Transaction } from '../types/transaction.types'
 import { CurrencyIcon } from './CurrencyIcon'
 import {
@@ -13,9 +14,17 @@ interface TransactionStatsCardProps {
   transactions: Transaction[]
   currency: SupportedCurrency
   onCurrencyChange: (currency: SupportedCurrency) => void
+  onExport: () => void
+  isExporting: boolean
 }
 
-export function TransactionStatsCard({ transactions, currency, onCurrencyChange }: TransactionStatsCardProps) {
+export function TransactionStatsCard({
+  transactions,
+  currency,
+  onCurrencyChange,
+  onExport,
+  isExporting,
+}: TransactionStatsCardProps) {
 
   const stats = useMemo(() => {
     let cashIn = 0
@@ -43,22 +52,38 @@ export function TransactionStatsCard({ transactions, currency, onCurrencyChange 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="font-title text-title-md font-semibold text-on-surface">Transaction Stats</h2>
 
-        <div className="flex items-center gap-2 rounded-full border border-outline-variant bg-surface-container-lowest p-1">
-          {(['AED', 'INR'] as SupportedCurrency[]).map((code) => (
-            <button
-              key={code}
-              type="button"
-              onClick={() => onCurrencyChange(code)}
-              className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${
-                currency === code
-                  ? 'bg-white text-on-surface shadow-md'
-                  : 'text-outline hover:bg-primary-fixed/20 hover:text-on-surface'
-              }`}
-            >
-              <CurrencyIcon currency={code} size="sm" />
-              {code}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 rounded-full border border-outline-variant bg-surface-container-lowest p-1">
+            {(['AED', 'INR'] as SupportedCurrency[]).map((code) => (
+              <button
+                key={code}
+                type="button"
+                onClick={() => onCurrencyChange(code)}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${
+                  currency === code
+                    ? 'bg-white text-on-surface shadow-md'
+                    : 'text-outline hover:bg-primary-fixed/20 hover:text-on-surface'
+                }`}
+              >
+                <CurrencyIcon currency={code} size="sm" />
+                {code}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={onExport}
+            disabled={isExporting}
+            className="flex items-center gap-2 rounded-full border border-outline-variant bg-surface-container-lowest px-4 py-2 text-sm font-medium text-outline transition-all duration-200 hover:bg-primary-fixed/20 hover:text-on-surface disabled:opacity-50"
+          >
+            {isExporting ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            {isExporting ? 'Exporting...' : 'Export'}
+          </button>
         </div>
       </div>
 
