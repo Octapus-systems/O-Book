@@ -1,5 +1,6 @@
-import { ComingSoonPage } from '@/modules/dashboard/pages/ComingSoonPage'
+import { ImportExportPage } from '@/modules/dashboard/pages/ImportExportPage'
 
-export default function ImportExportPage() {
-  return <ComingSoonPage title="Import / Export" />
+export default function Page() {
+  return <ImportExportPage />
 }
+
