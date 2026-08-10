@@ -15,6 +15,9 @@ import {
   Sparkles,
   Info,
   Check,
+  Archive,
+  FileWarning,
+  Loader2,
 } from 'lucide-react'
 import { parseExcelFile, type ParsedImportRow } from '../utils/excel-import.parser'
 import { getAuthUser } from '@/lib/auth-store'
@@ -24,6 +27,31 @@ type ExistingCategory = {
   id: string
   name: string
   type: string
+}
+
+// ---------------------------------------------------------------------------
+// Attachment type (subset of what the API returns)
+// ---------------------------------------------------------------------------
+type TransactionAttachment = {
+  id: string
+  fileName: string
+  filePath: string // public Supabase URL
+  mimeType: string
+  fileSize: number
+}
+
+type TransactionWithAttachments = {
+  id: string
+  type: string
+  amount: number
+  balance: number
+  currency: string
+  description: string | null
+  date: string
+  category: { name: string } | null
+  paymentMethod: { name: string } | null
+  createdBy: { name: string } | null
+  attachments: TransactionAttachment[]
 }
 
 export function ImportExportPage() {
@@ -39,6 +67,12 @@ export function ImportExportPage() {
     importedCount: number
     categoriesCreatedCount: number
   } | null>(null)
+
+  // ZIP export state
+  const [exportingZip, setExportingZip] = useState(false)
+  const [zipProgress, setZipProgress] = useState<string | null>(null)
+  const [zipFailedFiles, setZipFailedFiles] = useState<string[]>([])
+  const [zipSuccess, setZipSuccess] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -169,6 +203,72 @@ export function ImportExportPage() {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Helpers shared by both export functions
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Build the Excel workbook from a list of transactions.
+   * @param withAttachmentCol  When true, adds an "Attachments" column populated
+   *                           with the ZIP-internal filenames for each transaction.
+   * @param attachmentMap      Map from transaction.id → array of zip-internal filenames.
+   */
+  async function buildWorkbook(
+    transactions: TransactionWithAttachments[],
+    withAttachmentCol: boolean,
+    attachmentMap: Map<string, string[]>
+  ) {
+    const ExcelJS = (await import('exceljs')).default || (await import('exceljs'))
+    const workbook = new ExcelJS.Workbook()
+    const worksheet = workbook.addWorksheet('Transactions')
+
+    worksheet.addRow(['Transaction Report'])
+    worksheet.getCell('A1').font = { name: 'Arial', size: 16, bold: true }
+    worksheet.addRow([`Exported on: ${new Date().toLocaleString()}`])
+    worksheet.addRow([])
+
+    const headers = ['Description & User', 'Category', 'Amount', 'Balance', 'Status']
+    if (withAttachmentCol) headers.push('Attachments')
+
+    const headerRow = worksheet.addRow(headers)
+    headerRow.eachCell((cell) => {
+      cell.font = { name: 'Arial', size: 11, bold: true }
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      }
+    })
+
+    transactions.forEach((tx) => {
+      const descUser = `${tx.description || '-'}\nAdded by ${tx.createdBy?.name || 'User'} • ${new Date(tx.date).toLocaleDateString()}`
+      const sign = tx.type === 'CASH_IN' ? '+' : '-'
+      const amountStr = `${sign}₹${tx.amount}\n${tx.currency || 'INR'}`
+      const balanceStr = `₹${tx.balance ?? 0}`
+
+      const rowData: (string | number)[] = [
+        descUser,
+        tx.category?.name || 'General',
+        amountStr,
+        balanceStr,
+        'Approved',
+      ]
+
+      if (withAttachmentCol) {
+        const files = attachmentMap.get(tx.id) ?? []
+        rowData.push(files.join(', '))
+      }
+
+      worksheet.addRow(rowData)
+    })
+
+    return workbook
+  }
+
+  // ---------------------------------------------------------------------------
+  // Export Excel only (existing behaviour — unchanged)
+  // ---------------------------------------------------------------------------
+
   const handleExportClick = async () => {
     try {
       const res = await fetch('/api/v1/transactions')
@@ -179,40 +279,13 @@ export function ImportExportPage() {
         return
       }
 
-      const transactions = data.data
+      const transactions: TransactionWithAttachments[] = data.data
       if (transactions.length === 0) {
         alert('No transactions to export.')
         return
       }
 
-      const ExcelJS = (await import('exceljs')).default || (await import('exceljs'))
-      const workbook = new ExcelJS.Workbook()
-      const worksheet = workbook.addWorksheet('Transactions')
-
-      worksheet.addRow(['Transaction Report'])
-      worksheet.getCell('A1').font = { name: 'Arial', size: 16, bold: true }
-      worksheet.addRow([`Exported on: ${new Date().toLocaleString()}`])
-      worksheet.addRow([])
-
-      const headers = ['Description & User', 'Category', 'Amount', 'Balance', 'Status']
-      const headerRow = worksheet.addRow(headers)
-      headerRow.eachCell((cell) => {
-        cell.font = { name: 'Arial', size: 11, bold: true }
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFE0E0E0' },
-        }
-      })
-
-      transactions.forEach((tx: any) => {
-        const descUser = `${tx.description || '-'}\nAdded by ${tx.createdBy?.name || 'User'} • ${new Date(tx.date).toLocaleDateString()}`
-        const sign = tx.type === 'CASH_IN' ? '+' : '-'
-        const amountStr = `${sign}₹${tx.amount}\n${tx.currency || 'INR'}`
-        const balanceStr = `₹${tx.balance ?? 0}`
-        worksheet.addRow([descUser, tx.category?.name || 'General', amountStr, balanceStr, 'Approved'])
-      })
-
+      const workbook = await buildWorkbook(transactions, false, new Map())
       const buffer = await workbook.xlsx.writeBuffer()
       const blob = new Blob([buffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -226,6 +299,134 @@ export function ImportExportPage() {
     } catch (err) {
       console.error('Export error:', err)
       alert('Failed to export Excel file.')
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Export Excel + Attachments as ZIP
+  // ---------------------------------------------------------------------------
+
+  const handleExportZip = async () => {
+    setExportingZip(true)
+    setZipProgress('Fetching transactions…')
+    setZipFailedFiles([])
+    setZipSuccess(false)
+
+    try {
+      // 1. Fetch transactions (already includes attachments[] from the API)
+      const res = await fetch('/api/v1/transactions')
+      const data = await res.json()
+
+      if (!data.success || !Array.isArray(data.data)) {
+        throw new Error('Failed to fetch transactions.')
+      }
+
+      const transactions: TransactionWithAttachments[] = data.data
+      if (transactions.length === 0) {
+        throw new Error('No transactions to export.')
+      }
+
+      // 2. Collect every attachment across all transactions
+      type AttachmentJob = {
+        txId: string
+        txShortId: string
+        originalFileName: string
+        url: string
+        zipName: string // deduped filename inside the ZIP
+      }
+
+      // Build jobs, deduplicating filenames inside the Attachments/ folder
+      const usedNames = new Map<string, number>() // base-name → count
+
+      const jobs: AttachmentJob[] = []
+      transactions.forEach((tx) => {
+        const shortId = tx.id.slice(-5) // last 5 chars of cuid — enough to be readable
+        tx.attachments.forEach((att) => {
+          const safe = att.fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+          const base = `Transaction-${shortId}-${safe}`
+
+          // Deduplicate: if the same base name appears more than once, suffix with a counter.
+          // e.g. "Transaction-abc12-invoice.pdf" → "Transaction-abc12-invoice-2.pdf"
+          const existing = usedNames.get(base) ?? 0
+          let zipName: string
+          if (existing === 0) {
+            zipName = base
+          } else {
+            const lastDot = base.lastIndexOf('.')
+            if (lastDot > 0) {
+              zipName = `${base.slice(0, lastDot)}-${existing}${base.slice(lastDot)}`
+            } else {
+              zipName = `${base}-${existing}`
+            }
+          }
+          usedNames.set(base, existing + 1)
+
+          jobs.push({ txId: tx.id, txShortId: shortId, originalFileName: att.fileName, url: att.filePath, zipName })
+        })
+      })
+
+      // 3. Build a map: txId → [zipName, ...] — used for the Excel Attachments column
+      const attachmentMap = new Map<string, string[]>()
+      transactions.forEach((tx) => attachmentMap.set(tx.id, []))
+      jobs.forEach((j) => attachmentMap.get(j.txId)!.push(j.zipName))
+
+      // 4. Build Excel
+      setZipProgress('Building Excel…')
+      const workbook = await buildWorkbook(transactions, true, attachmentMap)
+      const xlsxBuffer = await workbook.xlsx.writeBuffer()
+
+      // 5. Fetch each attachment file (resilient — continue on failure)
+      const failed: string[] = []
+      const zipFiles: Record<string, Uint8Array> = {
+        'Transactions.xlsx': new Uint8Array(xlsxBuffer as ArrayBuffer),
+      }
+
+      const total = jobs.length
+      let done = 0
+
+      for (const job of jobs) {
+        done++
+        setZipProgress(
+          total > 0
+            ? `Downloading attachment ${done} of ${total}: ${job.originalFileName}`
+            : 'Building ZIP…'
+        )
+
+        try {
+          const fileRes = await fetch(job.url)
+          if (!fileRes.ok) throw new Error(`HTTP ${fileRes.status}`)
+          const arrayBuf = await fileRes.arrayBuffer()
+          zipFiles[`Attachments/${job.zipName}`] = new Uint8Array(arrayBuf)
+        } catch (err) {
+          console.warn(`Failed to download attachment "${job.originalFileName}":`, err)
+          failed.push(job.originalFileName)
+        }
+      }
+
+      // 6. Generate ZIP using fflate (synchronous for simplicity at this scale)
+      setZipProgress('Generating ZIP…')
+      const { zipSync } = await import('fflate')
+      const zipped = zipSync(zipFiles, { level: 0 }) // level 0 = store (fast; files are already compressed)
+
+      // 7. Trigger download
+      const blob = new Blob([zipped], { type: 'application/zip' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `O-Book-Export_${new Date().toISOString().slice(0, 10)}.zip`
+      link.click()
+      URL.revokeObjectURL(url)
+
+      setZipFailedFiles(failed)
+      setZipSuccess(true)
+    } catch (err) {
+      console.error('ZIP export error:', err)
+      setZipFailedFiles([])
+      setZipProgress(null)
+      alert(err instanceof Error ? err.message : 'Failed to generate ZIP export.')
+    } finally {
+      setExportingZip(false)
+      setZipProgress(null)
     }
   }
 
@@ -534,24 +735,125 @@ export function ImportExportPage() {
 
       {/* Export Tab */}
       {activeTab === 'export' && (
-        <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900 text-center max-w-xl mx-auto space-y-6">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
-            <Download className="h-8 w-8" />
+        <div className="max-w-2xl mx-auto space-y-5">
+
+          {/* ── Success banner after ZIP export ── */}
+          {zipSuccess && (
+            <div className="flex items-start justify-between rounded-2xl bg-emerald-50 p-4 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 gap-3">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+                    ZIP downloaded successfully!
+                  </p>
+                  {zipFailedFiles.length > 0 && (
+                    <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+                      {zipFailedFiles.length} attachment{zipFailedFiles.length > 1 ? 's' : ''} could not be downloaded and were skipped:{' '}
+                      <span className="font-semibold">{zipFailedFiles.join(', ')}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => { setZipSuccess(false); setZipFailedFiles([]) }}
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900 shrink-0"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* ── Progress indicator while exporting ZIP ── */}
+          {exportingZip && zipProgress && (
+            <div className="flex items-center gap-3 rounded-2xl bg-indigo-50 p-4 border border-indigo-200 dark:bg-indigo-950/40 dark:border-indigo-800">
+              <Loader2 className="h-5 w-5 animate-spin text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <p className="text-sm font-medium text-indigo-900 dark:text-indigo-200">{zipProgress}</p>
+            </div>
+          )}
+
+          {/* ── Option 1: Excel only ── */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 flex flex-col sm:flex-row items-center gap-5">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
+              <FileSpreadsheet className="h-7 w-7" />
+            </div>
+            <div className="flex-1 text-center sm:text-left">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Download Excel Only</h3>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Export all transaction records as a formatted <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">.xlsx</code> file.
+                Does not include attachments.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleExportClick}
+              disabled={exportingZip}
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download className="h-4 w-4" />
+              Download Excel
+            </button>
           </div>
-          <div>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white">Export Transactions to Excel</h3>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              Download your complete transaction records in a formatted Excel file ready for reporting and audit.
-            </p>
+
+          {/* ── Option 2: Excel + Attachments ZIP ── */}
+          <div className="rounded-3xl border border-violet-200 bg-white p-6 shadow-sm dark:border-violet-800/50 dark:bg-slate-900 flex flex-col sm:flex-row items-center gap-5 relative overflow-hidden">
+            {/* subtle accent stripe */}
+            <div className="absolute inset-y-0 left-0 w-1 rounded-l-3xl bg-gradient-to-b from-violet-500 to-indigo-500" />
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-950 dark:text-violet-400">
+              <Archive className="h-7 w-7" />
+            </div>
+            <div className="flex-1 text-center sm:text-left">
+              <div className="flex items-center justify-center sm:justify-start gap-2">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Export Excel + Attachments</h3>
+                <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700 dark:bg-violet-950 dark:text-violet-300">
+                  ZIP
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Downloads a <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">.zip</code> containing{' '}
+                <strong className="text-slate-700 dark:text-slate-300">Transactions.xlsx</strong> plus an{' '}
+                <strong className="text-slate-700 dark:text-slate-300">Attachments/</strong> folder with every invoice, receipt, and bill attached to your transactions.
+              </p>
+              {/* ZIP structure preview */}
+              <div className="mt-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 px-3 py-2 text-[11px] font-mono text-slate-500 dark:text-slate-400 text-left leading-relaxed">
+                📦 O-Book-Export.zip<br />
+                &nbsp;&nbsp;📄 Transactions.xlsx<br />
+                &nbsp;&nbsp;📁 Attachments/<br />
+                &nbsp;&nbsp;&nbsp;&nbsp;📎 Transaction-xxxxx-invoice.pdf<br />
+                &nbsp;&nbsp;&nbsp;&nbsp;📎 Transaction-yyyyy-receipt.jpg
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleExportZip}
+              disabled={exportingZip}
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-violet-500/25 hover:bg-violet-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exportingZip ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Exporting…
+                </>
+              ) : (
+                <>
+                  <Archive className="h-4 w-4" />
+                  Export ZIP
+                </>
+              )}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleExportClick}
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 hover:bg-indigo-700 active:scale-95 transition-all"
-          >
-            <Download className="h-4 w-4" />
-            Download Excel Spreadsheet
-          </button>
+
+          {/* ── Failed-files warning (shown after export if any files failed) ── */}
+          {!zipSuccess && zipFailedFiles.length > 0 && (
+            <div className="flex items-start gap-3 rounded-2xl bg-amber-50 p-4 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-800">
+              <FileWarning className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Some attachments could not be downloaded</p>
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                  {zipFailedFiles.join(', ')}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

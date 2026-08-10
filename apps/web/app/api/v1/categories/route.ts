@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getDatabaseErrorMessage } from '@/lib/database-error'
+import { authenticateApiKeyOrSession } from '@/lib/api-auth'
 
 // GET /api/v1/categories — list categories
 export async function GET(request: NextRequest) {
   try {
+    const auth = await authenticateApiKeyOrSession(request, 'categories:read')
+    if (!auth.isAuthenticated) {
+      return NextResponse.json(
+        { success: false, message: auth.error ?? 'Unauthorized' },
+        { status: auth.status ?? 401 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
     const all = searchParams.get('all') === 'true'
@@ -33,6 +42,14 @@ export async function GET(request: NextRequest) {
 // POST /api/v1/categories — create new category
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateApiKeyOrSession(request, 'categories:write')
+    if (!auth.isAuthenticated) {
+      return NextResponse.json(
+        { success: false, message: auth.error ?? 'Unauthorized' },
+        { status: auth.status ?? 401 }
+      )
+    }
+
     const body = await request.json()
     const { name, type, description, color, isActive } = body
 
