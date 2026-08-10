@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { getDatabaseErrorMessage } from '@/lib/database-error'
 import { uploadAttachment } from '@/lib/supabase-storage'
 
+import { authenticateApiKeyOrSession } from '@/lib/api-auth'
+
 const DEFAULT_CASHBOOK_ID = 'default-cashbook'
 const MAX_FILE_SIZE = 50 * 1024 * 1024  // 50 MB — matches Supabase bucket limit
 const ALLOWED_MIME_TYPES = new Set([
@@ -78,6 +80,14 @@ function parseTransactionPayload(formData: FormData) {
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await authenticateApiKeyOrSession(request, 'transactions:read')
+    if (!auth.isAuthenticated) {
+      return NextResponse.json(
+        { success: false, message: auth.error ?? 'Unauthorized' },
+        { status: auth.status ?? 401 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const cashbookId = searchParams.get('cashbookId') ?? DEFAULT_CASHBOOK_ID
 
@@ -130,6 +140,14 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateApiKeyOrSession(request, 'transactions:write')
+    if (!auth.isAuthenticated) {
+      return NextResponse.json(
+        { success: false, message: auth.error ?? 'Unauthorized' },
+        { status: auth.status ?? 401 }
+      )
+    }
+
     const contentType = request.headers.get('content-type') ?? ''
     let payload
 
@@ -157,6 +175,8 @@ export async function POST(request: NextRequest) {
       files,
     } = payload
 
+    const effectiveCreatedById = createdById || auth.user?.id
+
     if (!type || !['CASH_IN', 'CASH_OUT'].includes(type)) {
       return NextResponse.json(
         { success: false, message: 'Invalid transaction type', error: 'INVALID_TYPE' },
@@ -178,9 +198,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!categoryId || !paymentMethodId || !createdById) {
+    if (!categoryId || !paymentMethodId || !effectiveCreatedById) {
       return NextResponse.json(
-        { success: false, message: 'Missing required fields', error: 'MISSING_FIELDS' },
+        { success: false, message: 'Missing required fields (categoryId, paymentMethodId)', error: 'MISSING_FIELDS' },
         { status: 400 }
       )
     }
@@ -215,7 +235,7 @@ export async function POST(request: NextRequest) {
           cashbookId,
           description: description ?? null,
           date: date ? new Date(date) : new Date(),
-          createdById,
+          createdById: effectiveCreatedById,
         },
         include: {
           category: true,
@@ -228,7 +248,7 @@ export async function POST(request: NextRequest) {
       await tx.auditLog.create({
         data: {
           transactionId: created.id,
-          userId: createdById,
+          userId: effectiveCreatedById,
           action: 'CREATED',
           changes: {
             type,

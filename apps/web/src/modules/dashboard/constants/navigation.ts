@@ -6,6 +6,7 @@ import {
   Users,
   Settings,
   CreditCard,
+  Key,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -22,5 +23,5 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Activity Logs', href: '/activity-logs', icon: History, implemented: false },
   { label: 'Import/Export', href: '/import-export', icon: Import, implemented: true },
   { label: 'User & Category', href: '/users', icon: Users, implemented: true },
-  { label: 'Settings', href: '/settings', icon: Settings, implemented: false },
+  { label: 'API & Integration', href: '/settings', icon: Key, implemented: true },
 ]
