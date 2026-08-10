@@ -1,8 +1,9 @@
 import { Calendar, SlidersHorizontal, ChevronDown } from 'lucide-react'
 import { CURRENCY_LABELS, type SupportedCurrency } from '../constants/currency'
 
-type DateRangeOption = 'all-time' | 'today' | 'week' | 'last-30-days' | 'custom'
-type TransactionType = 'all' | 'cash-in' | 'cash-out'
+export type DateRangeOption = 'all-time' | 'today' | 'week' | 'last-30-days' | 'custom'
+export type TransactionType = 'all' | 'cash-in' | 'cash-out'
+export type SortOption = 'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc'
 
 interface TransactionFiltersProps {
   selectedCurrency: SupportedCurrency
@@ -21,6 +22,8 @@ interface TransactionFiltersProps {
   endDate: string
   onStartDateChange: (date: string) => void
   onEndDateChange: (date: string) => void
+  selectedSort?: SortOption
+  onSortChange?: (sort: SortOption) => void
 }
 
 const DATE_RANGE_LABELS: Record<DateRangeOption, string> = {
@@ -35,6 +38,13 @@ const TYPE_LABELS: Record<TransactionType, string> = {
   'all': 'All Types',
   'cash-in': 'Cash In',
   'cash-out': 'Cash Out',
+}
+
+const SORT_LABELS: Record<SortOption, string> = {
+  'date-desc': 'Date: Newest First',
+  'date-asc': 'Date: Oldest First',
+  'amount-desc': 'Amount: High to Low',
+  'amount-asc': 'Amount: Low to High',
 }
 
 export function TransactionFilters({
@@ -54,6 +64,8 @@ export function TransactionFilters({
   endDate,
   onStartDateChange,
   onEndDateChange,
+  selectedSort,
+  onSortChange,
 }: TransactionFiltersProps) {
   const sortedUsers = [...users].sort((a, b) => a.name.localeCompare(b.name))
 
@@ -187,6 +199,28 @@ export function TransactionFilters({
           <ChevronDown className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
         </div>
       </div>
+
+      {onSortChange && selectedSort && (
+        <div className="flex min-w-[150px] flex-1 flex-col gap-1.5 sm:min-w-[160px]">
+          <label className="text-label-sm font-bold uppercase tracking-wider text-outline">
+            Sort By
+          </label>
+          <div className="relative w-full">
+            <select
+              className="w-full squircle appearance-none border border-outline-variant bg-surface-container-lowest px-3 py-2.5 pr-8 font-body text-body-md outline-none sm:px-4 font-semibold text-primary"
+              value={selectedSort}
+              onChange={(e) => onSortChange(e.target.value as SortOption)}
+            >
+              {Object.entries(SORT_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
+          </div>
+        </div>
+      )}
 
       <button
         type="button"
