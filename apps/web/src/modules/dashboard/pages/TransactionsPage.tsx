@@ -355,7 +355,7 @@ export default function TransactionsPage({
       worksheet.addRow([])
       
       // Add Column Headers
-      const headers = ['Description & User', 'Category', 'Amount', 'Balance', 'Status']
+      const headers = ['Date', 'Description', 'Category', 'Amount', 'Balance', 'Status', 'Entered By']
       const headerRow = worksheet.addRow(headers)
       headerRow.eachCell((cell) => {
         cell.font = { name: 'Arial', size: 11, bold: true }
@@ -375,28 +375,34 @@ export default function TransactionsPage({
       
       // Add Data Rows
       filtered.forEach((tx) => {
-        const descUser = `${tx.description || '-'}\nAdded by ${tx.createdBy?.name || 'Unknown'} • ${tx.date} • ${tx.time}`
+        const dateStr = `${tx.date}${tx.time ? ' ' + tx.time : ''}`
+        const descStr = tx.description || '-'
         const category = tx.category
         
         const amountStr = `${formatCurrencyAmount(tx.amount, tx.currency, { showSign: true })}\n${tx.currency}`
         const balanceStr = formatCurrencyAmount(tx.balance, tx.currency, { showSign: true })
         
         const statusLabel = tx.status === 'approved' ? 'Approved' : tx.status === 'pending' ? 'Pending' : 'Flagged'
+        const enteredByStr = tx.createdBy?.name || 'Unknown'
         
         const row = worksheet.addRow([
-          descUser,
+          dateStr,
+          descStr,
           category,
           amountStr,
           balanceStr,
-          statusLabel
+          statusLabel,
+          enteredByStr
         ])
         
         // Wrap text and vertical alignment top
-        row.getCell(1).alignment = { wrapText: true, vertical: 'top', horizontal: 'left' }
-        row.getCell(2).alignment = { vertical: 'top', horizontal: 'left' }
-        row.getCell(3).alignment = { wrapText: true, vertical: 'top', horizontal: 'left' }
-        row.getCell(4).alignment = { vertical: 'top', horizontal: 'left' }
+        row.getCell(1).alignment = { vertical: 'top', horizontal: 'left' }
+        row.getCell(2).alignment = { wrapText: true, vertical: 'top', horizontal: 'left' }
+        row.getCell(3).alignment = { vertical: 'top', horizontal: 'left' }
+        row.getCell(4).alignment = { wrapText: true, vertical: 'top', horizontal: 'left' }
         row.getCell(5).alignment = { vertical: 'top', horizontal: 'left' }
+        row.getCell(6).alignment = { vertical: 'top', horizontal: 'left' }
+        row.getCell(7).alignment = { vertical: 'top', horizontal: 'left' }
       })
       
       // Auto-fit columns

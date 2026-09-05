@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   UploadCloud,
   FileSpreadsheet,
@@ -95,31 +95,46 @@ export function ImportExportPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   // Fetch transactions and users for export filtering
-  useEffect(() => {
-    async function loadExportData() {
-      setLoadingExportData(true)
-      try {
-        const [txRes, userRes] = await Promise.all([
-          fetch('/api/v1/transactions'),
-          fetch('/api/v1/users'),
-        ])
-        const txData = await txRes.json()
-        const userData = await userRes.json()
+  const loadExportData = useCallback(async () => {
+    setLoadingExportData(true)
+    try {
+      const [txRes, userRes] = await Promise.all([
+        fetch('/api/v1/transactions'),
+        fetch('/api/v1/users'),
+      ])
+      const txData = await txRes.json()
+      const userData = await userRes.json()
 
-        if (txData.success && Array.isArray(txData.data)) {
-          setExportTransactions(txData.data)
+      let fetchedTxs: TransactionWithAttachments[] = []
+      if (txData.success && Array.isArray(txData.data)) {
+        fetchedTxs = txData.data
+        setExportTransactions(fetchedTxs)
+        const currencyList = fetchedTxs
+          .map((tx: TransactionWithAttachments) => tx.currency?.trim().toUpperCase())
+          .filter(Boolean)
+        const availableCurrencies = new Set(currencyList)
+
+        const currentCurrUpper = selectedCurrency.trim().toUpperCase()
+        if (!availableCurrencies.has(currentCurrUpper) && availableCurrencies.size > 0) {
+          const firstAvailable = Array.from(availableCurrencies)[0] as SupportedCurrency
+          setSelectedCurrency(firstAvailable)
         }
-        if (userData.success && Array.isArray(userData.data)) {
-          setExportUsers(userData.data)
-        }
-      } catch (err) {
-        console.error('Failed to load transactions for export filtering:', err)
-      } finally {
-        setLoadingExportData(false)
       }
+      if (userData.success && Array.isArray(userData.data)) {
+        setExportUsers(userData.data)
+      }
+      return fetchedTxs
+    } catch (err) {
+      console.error('Failed to load transactions for export filtering:', err)
+      return []
+    } finally {
+      setLoadingExportData(false)
     }
+  }, [selectedCurrency])
+
+  useEffect(() => {
     loadExportData()
-  }, [])
+  }, [loadExportData])
 
   // Categories extracted from transactions
   const exportCategories = useMemo(() => {
@@ -129,31 +144,55 @@ export function ImportExportPage() {
 
   // Filtered and Sorted transactions calculation
   const filteredAndSortedTransactions = useMemo(() => {
-    let list = [...exportTransactions]
+    // 1. Currency filter: strictly filter to transactions matching selected currency (case-insensitive & trimmed)
+    const currTarget = selectedCurrency ? selectedCurrency.trim().toUpperCase() : ''
+    let list = currTarget
+      ? exportTransactions.filter((tx) => (tx.currency || 'AED').trim().toUpperCase() === currTarget)
+      : [...exportTransactions]
 
-    // Currency filter
-    if (selectedCurrency) {
-      list = list.filter((tx) => tx.currency === selectedCurrency)
-    }
+    // 2. Sort currency-filtered transactions chronologically (oldest to newest) to calculate accurate running balance
+    // Reversing list first ensures baseline order is Oldest-to-Newest before sorting
+    const oldestFirst = [...list].reverse().sort((a, b) => {
+      const timeA = new Date(a.date).getTime()
+      const timeB = new Date(b.date).getTime()
+      if (timeA !== timeB) return timeA - timeB
+      const createdA = ((a as any).createdAt ? new Date((a as any).createdAt) : new Date(a.date)).getTime()
+      const createdB = ((b as any).createdAt ? new Date((b as any).createdAt) : new Date(b.date)).getTime()
+      return createdA - createdB
+    })
 
-    // Type filter
+    let runningBalance = 0
+    const balanceMap = new Map<string, number>()
+    oldestFirst.forEach((tx) => {
+      const signedAmount = tx.type === 'CASH_IN' ? Number(tx.amount) : -Number(tx.amount)
+      runningBalance += signedAmount
+      balanceMap.set(tx.id, runningBalance)
+    })
+
+    // Attach calculated currency-isolated balance to each transaction
+    list = list.map((tx) => ({
+      ...tx,
+      balance: balanceMap.get(tx.id) ?? tx.balance,
+    }))
+
+    // 3. Type filter
     if (selectedType === 'cash-in') {
       list = list.filter((tx) => tx.type === 'CASH_IN')
     } else if (selectedType === 'cash-out') {
       list = list.filter((tx) => tx.type === 'CASH_OUT')
     }
 
-    // Category filter
+    // 4. Category filter
     if (selectedCategory !== 'all') {
       list = list.filter((tx) => tx.category?.name === selectedCategory)
     }
 
-    // User filter
+    // 5. User filter
     if (selectedUser !== 'all') {
       list = list.filter((tx) => tx.createdBy?.id === selectedUser || tx.createdBy?.name === selectedUser)
     }
 
-    // Date Range filter
+    // 6. Date Range filter
     const now = new Date()
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     if (selectedDateRange === 'today') {
@@ -179,13 +218,23 @@ export function ImportExportPage() {
       }
     }
 
-    // Sorting
+    // 7. Sorting
     list.sort((a, b) => {
       if (selectedSort === 'date-desc') {
-        return new Date(b.date).getTime() - new Date(a.date).getTime()
+        const timeA = new Date(a.date).getTime()
+        const timeB = new Date(b.date).getTime()
+        if (timeA !== timeB) return timeB - timeA
+        const createdA = ((a as any).createdAt ? new Date((a as any).createdAt) : new Date(a.date)).getTime()
+        const createdB = ((b as any).createdAt ? new Date((b as any).createdAt) : new Date(b.date)).getTime()
+        return createdB - createdA
       }
       if (selectedSort === 'date-asc') {
-        return new Date(a.date).getTime() - new Date(b.date).getTime()
+        const timeA = new Date(a.date).getTime()
+        const timeB = new Date(b.date).getTime()
+        if (timeA !== timeB) return timeA - timeB
+        const createdA = ((a as any).createdAt ? new Date((a as any).createdAt) : new Date(a.date)).getTime()
+        const createdB = ((b as any).createdAt ? new Date((b as any).createdAt) : new Date(b.date)).getTime()
+        return createdA - createdB
       }
       if (selectedSort === 'amount-desc') {
         return b.amount - a.amount
@@ -350,7 +399,7 @@ export function ImportExportPage() {
     worksheet.addRow([`Exported on: ${new Date().toLocaleString()}`])
     worksheet.addRow([])
 
-    const headers = ['Description & User', 'Category', 'Amount', 'Balance', 'Status']
+    const headers = ['Date', 'Description', 'Category', 'Amount', 'Balance', 'Status', 'Entered By']
     if (withAttachmentCol) headers.push('Attachments')
 
     const headerRow = worksheet.addRow(headers)
@@ -363,18 +412,34 @@ export function ImportExportPage() {
       }
     })
 
+    // Set column widths
+    worksheet.getColumn(1).width = 15
+    worksheet.getColumn(2).width = 35
+    worksheet.getColumn(3).width = 20
+    worksheet.getColumn(4).width = 18
+    worksheet.getColumn(5).width = 18
+    worksheet.getColumn(6).width = 15
+    worksheet.getColumn(7).width = 20
+    if (withAttachmentCol) {
+      worksheet.getColumn(8).width = 30
+    }
+
     transactions.forEach((tx) => {
-      const descUser = `${tx.description || '-'}\nAdded by ${tx.createdBy?.name || 'User'} • ${new Date(tx.date).toLocaleDateString()}`
-      const sign = tx.type === 'CASH_IN' ? '+' : '-'
-      const amountStr = `${sign}₹${tx.amount}\n${tx.currency || 'INR'}`
-      const balanceStr = `₹${tx.balance ?? 0}`
+      const dateStr = new Date(tx.date).toLocaleDateString()
+      const descStr = tx.description || '-'
+      const signedAmount = tx.type === 'CASH_IN' ? tx.amount : -tx.amount
+      const amountStr = `${formatCurrencyAmount(signedAmount, tx.currency, { showSign: true })}\n${tx.currency}`
+      const balanceStr = formatCurrencyAmount(tx.balance, tx.currency, { showSign: true })
+      const enteredByStr = tx.createdBy?.name || 'User'
 
       const rowData: (string | number)[] = [
-        descUser,
+        dateStr,
+        descStr,
         tx.category?.name || 'General',
         amountStr,
         balanceStr,
         'Approved',
+        enteredByStr,
       ]
 
       if (withAttachmentCol) {
@@ -394,6 +459,9 @@ export function ImportExportPage() {
 
   const handleExportClick = async () => {
     try {
+      if (exportTransactions.length === 0) {
+        await loadExportData()
+      }
       const transactions = filteredAndSortedTransactions
       if (transactions.length === 0) {
         alert('No transactions match the current filter criteria.')
@@ -422,16 +490,21 @@ export function ImportExportPage() {
   // ---------------------------------------------------------------------------
 
   const handleExportZip = async () => {
+    if (exportTransactions.length === 0) {
+      await loadExportData()
+    }
+    const transactions = filteredAndSortedTransactions
+    if (transactions.length === 0) {
+      alert('No transactions match the current filter criteria.')
+      return
+    }
+
     setExporting(true)
     setExportProgress('Preparing transactions…')
     setFailedFiles([])
     setExportSuccessMessage(null)
 
     try {
-      const transactions = filteredAndSortedTransactions
-      if (transactions.length === 0) {
-        throw new Error('No transactions match the current filter criteria.')
-      }
 
       type AttachmentJob = {
         txId: string
@@ -530,16 +603,21 @@ export function ImportExportPage() {
   // ---------------------------------------------------------------------------
 
   const handleExportImagesInExcel = async () => {
+    if (exportTransactions.length === 0) {
+      await loadExportData()
+    }
+    const transactions = filteredAndSortedTransactions
+    if (transactions.length === 0) {
+      alert('No transactions match the current filter criteria.')
+      return
+    }
+
     setExporting(true)
     setExportProgress('Preparing transactions…')
     setFailedFiles([])
     setExportSuccessMessage(null)
 
     try {
-      const transactions = filteredAndSortedTransactions
-      if (transactions.length === 0) {
-        throw new Error('No transactions match the current filter criteria.')
-      }
 
       const ExcelJS = (await import('exceljs')).default || (await import('exceljs'))
       const workbook = new ExcelJS.Workbook()
@@ -550,7 +628,7 @@ export function ImportExportPage() {
       worksheet.addRow([`Exported on: ${new Date().toLocaleString()}`])
       worksheet.addRow([])
 
-      const headers = ['Description & User', 'Category', 'Amount', 'Balance', 'Status', 'Attachments']
+      const headers = ['Date', 'Description', 'Category', 'Amount', 'Balance', 'Status', 'Entered By', 'Attachments']
       const headerRow = worksheet.addRow(headers)
       headerRow.eachCell((cell) => {
         cell.font = { name: 'Arial', size: 11, bold: true }
@@ -561,12 +639,14 @@ export function ImportExportPage() {
         }
       })
 
-      worksheet.getColumn(1).width = 35
-      worksheet.getColumn(2).width = 20
-      worksheet.getColumn(3).width = 18
+      worksheet.getColumn(1).width = 15
+      worksheet.getColumn(2).width = 35
+      worksheet.getColumn(3).width = 20
       worksheet.getColumn(4).width = 18
-      worksheet.getColumn(5).width = 15
-      worksheet.getColumn(6).width = 35
+      worksheet.getColumn(5).width = 18
+      worksheet.getColumn(6).width = 15
+      worksheet.getColumn(7).width = 20
+      worksheet.getColumn(8).width = 35
 
       const failedList: string[] = []
       const IMAGE_REGEX = /\.(jpg|jpeg|png|webp|gif)$/i
@@ -574,10 +654,12 @@ export function ImportExportPage() {
 
       for (let i = 0; i < transactions.length; i++) {
         const tx = transactions[i]
-        const descUser = `${tx.description || '-'}\nAdded by ${tx.createdBy?.name || 'User'} • ${new Date(tx.date).toLocaleDateString()}`
-        const sign = tx.type === 'CASH_IN' ? '+' : '-'
-        const amountStr = `${sign}₹${tx.amount}\n${tx.currency || 'INR'}`
-        const balanceStr = `₹${tx.balance ?? 0}`
+        const dateStr = new Date(tx.date).toLocaleDateString()
+        const descStr = tx.description || '-'
+        const signedAmount = tx.type === 'CASH_IN' ? tx.amount : -tx.amount
+        const amountStr = `${formatCurrencyAmount(signedAmount, tx.currency, { showSign: true })}\n${tx.currency}`
+        const balanceStr = formatCurrencyAmount(tx.balance, tx.currency, { showSign: true })
+        const enteredByStr = tx.createdBy?.name || 'User'
 
         const attachmentTexts: string[] = []
         let hasImage = false
@@ -604,7 +686,7 @@ export function ImportExportPage() {
                 })
 
                 worksheet.addImage(imageId, {
-                  tl: { col: 5 + imgColOffset * 0.4, row: currentRowIdx - 1 },
+                  tl: { col: 7 + imgColOffset * 0.4, row: currentRowIdx - 1 },
                   ext: { width: 100, height: 50 },
                   editAs: 'oneCell',
                 })
@@ -618,11 +700,13 @@ export function ImportExportPage() {
         }
 
         const rowData = [
-          descUser,
+          dateStr,
+          descStr,
           tx.category?.name || 'General',
           amountStr,
           balanceStr,
           'Approved',
+          enteredByStr,
           attachmentTexts.join(', '),
         ]
 
@@ -971,7 +1055,11 @@ export function ImportExportPage() {
                 Filter &amp; Sort Export Data
               </h2>
               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-700">
-                {filteredAndSortedTransactions.length} of {exportTransactions.length} transaction{exportTransactions.length === 1 ? '' : 's'} matching
+                {loadingExportData ? (
+                  <span className="inline-flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin text-indigo-500" /> Loading data...</span>
+                ) : (
+                  `${filteredAndSortedTransactions.length} of ${exportTransactions.length} transaction${exportTransactions.length === 1 ? '' : 's'} matching`
+                )}
               </span>
             </div>
 
@@ -1048,7 +1136,7 @@ export function ImportExportPage() {
             <button
               type="button"
               onClick={handleExportClick}
-              disabled={exporting}
+              disabled={exporting || loadingExportData}
               className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="h-4 w-4" />
@@ -1147,7 +1235,7 @@ export function ImportExportPage() {
               <button
                 type="button"
                 onClick={attachmentExportMode === 'zip' ? handleExportZip : handleExportImagesInExcel}
-                disabled={exporting}
+                disabled={exporting || loadingExportData}
                 className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {exporting ? (

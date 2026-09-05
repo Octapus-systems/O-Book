@@ -90,9 +90,13 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const cashbookId = searchParams.get('cashbookId') ?? DEFAULT_CASHBOOK_ID
+    const currencyParam = searchParams.get('currency')
 
     const transactions = await prisma.transaction.findMany({
-      where: { cashbookId },
+      where: {
+        cashbookId,
+        ...(currencyParam ? { currency: currencyParam } : {}),
+      },
       include: {
         category: true,
         paymentMethod: true,
@@ -103,20 +107,22 @@ export async function GET(request: NextRequest) {
       orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
     })
 
-    let runningBalance = 0
+    const runningBalances: Record<string, number> = {}
     const withBalance = transactions.map((tx) => {
       const amount = Number(tx.amount)
       const signedAmount = tx.type === 'CASH_IN' ? amount : -amount
-      runningBalance += signedAmount
+      const curr = tx.currency || 'AED'
+      runningBalances[curr] = (runningBalances[curr] || 0) + signedAmount
       return {
         id: tx.id,
         type: tx.type,
         amount,
         signedAmount,
-        balance: runningBalance,
+        balance: runningBalances[curr],
         currency: tx.currency,
         description: tx.description,
         date: tx.date.toISOString(),
+        createdAt: tx.createdAt.toISOString(),
         category: tx.category,
         paymentMethod: tx.paymentMethod,
         createdBy: tx.createdBy,
