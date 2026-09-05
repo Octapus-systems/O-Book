@@ -4,6 +4,7 @@ import { authenticateApiKeyOrSession } from '@/lib/api-auth'
 import ExcelJS from 'exceljs'
 import * as fflate from 'fflate'
 import * as CFB from 'cfb'
+import { formatCurrencyAmount } from '@/modules/dashboard/constants/currency'
 
 const DEFAULT_CASHBOOK_ID = 'default-cashbook'
 
@@ -106,9 +107,21 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const cashbookId = searchParams.get('cashbookId') ?? DEFAULT_CASHBOOK_ID
     const withAttachments = searchParams.get('attachments') !== 'false'
+    const currency = searchParams.get('currency') ?? 'AED'
+    const type = searchParams.get('type')
+    const category = searchParams.get('category')
+    const userId = searchParams.get('user') ?? searchParams.get('userId')
+    const dateRange = searchParams.get('dateRange')
+    const startDate = searchParams.get('startDate')
+    const endDate = searchParams.get('endDate')
+    const sort = searchParams.get('sort')
 
+    // Fetch all transactions for this cashbook and selected currency
     const transactions = await prisma.transaction.findMany({
-      where: { cashbookId },
+      where: {
+        cashbookId,
+        currency,
+      },
       include: {
         category: true,
         paymentMethod: true,
@@ -133,6 +146,7 @@ export async function GET(request: NextRequest) {
         currency: tx.currency,
         description: tx.description,
         date: tx.date,
+        createdAt: tx.createdAt,
         category: tx.category,
         paymentMethod: tx.paymentMethod,
         createdBy: tx.createdBy,
@@ -140,6 +154,78 @@ export async function GET(request: NextRequest) {
         attachments: tx.attachments,
       }
     })
+
+    let filtered = [...withBalance]
+
+    // Type filter
+    if (type === 'cash-in') {
+      filtered = filtered.filter((tx) => tx.type === 'CASH_IN')
+    } else if (type === 'cash-out') {
+      filtered = filtered.filter((tx) => tx.type === 'CASH_OUT')
+    }
+
+    // Category filter
+    if (category && category !== 'all') {
+      filtered = filtered.filter((tx) => tx.category?.name === category || tx.category?.id === category)
+    }
+
+    // User filter
+    if (userId && userId !== 'all') {
+      filtered = filtered.filter((tx) => tx.createdBy?.id === userId || tx.createdBy?.name === userId)
+    }
+
+    // Date Range filter
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    if (dateRange === 'today') {
+      filtered = filtered.filter((tx) => new Date(tx.date) >= today)
+    } else if (dateRange === 'week') {
+      const weekAgo = new Date(today)
+      weekAgo.setDate(weekAgo.getDate() - 7)
+      filtered = filtered.filter((tx) => new Date(tx.date) >= weekAgo)
+    } else if (dateRange === 'last-30-days') {
+      const thirtyDaysAgo = new Date(today)
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      filtered = filtered.filter((tx) => new Date(tx.date) >= thirtyDaysAgo)
+    } else if (dateRange === 'custom') {
+      if (startDate) {
+        const start = new Date(startDate)
+        start.setHours(0, 0, 0, 0)
+        filtered = filtered.filter((tx) => new Date(tx.date) >= start)
+      }
+      if (endDate) {
+        const end = new Date(endDate)
+        end.setHours(23, 59, 59, 999)
+        filtered = filtered.filter((tx) => new Date(tx.date) <= end)
+      }
+    }
+
+    // Sorting
+    if (sort === 'date-desc') {
+      filtered.sort((a, b) => {
+        const timeA = new Date(a.date).getTime()
+        const timeB = new Date(b.date).getTime()
+        if (timeA !== timeB) return timeB - timeA
+        const createdA = (a.createdAt ? new Date(a.createdAt) : new Date(a.date)).getTime()
+        const createdB = (b.createdAt ? new Date(b.createdAt) : new Date(b.date)).getTime()
+        return createdB - createdA
+      })
+    } else if (sort === 'date-asc') {
+      filtered.sort((a, b) => {
+        const timeA = new Date(a.date).getTime()
+        const timeB = new Date(b.date).getTime()
+        if (timeA !== timeB) return timeA - timeB
+        const createdA = (a.createdAt ? new Date(a.createdAt) : new Date(a.date)).getTime()
+        const createdB = (b.createdAt ? new Date(b.createdAt) : new Date(b.date)).getTime()
+        return createdA - createdB
+      })
+    } else if (sort === 'amount-desc') {
+      filtered.sort((a, b) => b.amount - a.amount)
+    } else if (sort === 'amount-asc') {
+      filtered.sort((a, b) => a.amount - b.amount)
+    } else {
+      filtered.reverse()
+    }
 
     // Prepare Excel workbook
     const workbook = new ExcelJS.Workbook()
@@ -150,7 +236,7 @@ export async function GET(request: NextRequest) {
     worksheet.addRow([`Exported on: ${new Date().toLocaleString()}`])
     worksheet.addRow([])
 
-    const headers = ['Description & User', 'Category', 'Amount', 'Balance', 'Status']
+    const headers = ['Date', 'Description', 'Category', 'Amount', 'Balance', 'Status', 'Entered By']
     if (withAttachments) {
       headers.push('Attachments')
     }
@@ -166,13 +252,15 @@ export async function GET(request: NextRequest) {
     })
 
     // Set column widths
-    worksheet.getColumn(1).width = 35
-    worksheet.getColumn(2).width = 20
-    worksheet.getColumn(3).width = 18
+    worksheet.getColumn(1).width = 15
+    worksheet.getColumn(2).width = 35
+    worksheet.getColumn(3).width = 20
     worksheet.getColumn(4).width = 18
-    worksheet.getColumn(5).width = 15
+    worksheet.getColumn(5).width = 18
+    worksheet.getColumn(6).width = 15
+    worksheet.getColumn(7).width = 20
     if (withAttachments) {
-      worksheet.getColumn(6).width = 30
+      worksheet.getColumn(8).width = 30
     }
 
     type NonImageOleJob = {
@@ -186,18 +274,22 @@ export async function GET(request: NextRequest) {
     // Fetch and embed attachments row by row
     let currentRowIdx = 5 // Row index in worksheet (1-indexed, starting after headers)
 
-    for (const tx of withBalance) {
-      const descUser = `${tx.description || '-'}\nAdded by ${tx.createdBy?.name || 'User'} • ${new Date(tx.date).toLocaleDateString()}`
-      const sign = tx.type === 'CASH_IN' ? '+' : '-'
-      const amountStr = `${sign}₹${tx.amount}\n${tx.currency || 'INR'}`
-      const balanceStr = `₹${tx.balance ?? 0}`
+    for (const tx of filtered) {
+      const dateStr = new Date(tx.date).toLocaleDateString()
+      const descStr = tx.description || '-'
+      const signedAmount = tx.type === 'CASH_IN' ? tx.amount : -tx.amount
+      const amountStr = `${formatCurrencyAmount(signedAmount, tx.currency, { showSign: true })}\n${tx.currency}`
+      const balanceStr = formatCurrencyAmount(tx.balance, tx.currency, { showSign: true })
+      const enteredByStr = tx.createdBy?.name || 'User'
 
       const rowData: (string | number)[] = [
-        descUser,
+        dateStr,
+        descStr,
         tx.category?.name || 'General',
         amountStr,
         balanceStr,
         'Approved',
+        enteredByStr,
       ]
 
       const attachmentNames: string[] = []
@@ -225,7 +317,7 @@ export async function GET(request: NextRequest) {
               })
 
               worksheet.addImage(imageId, {
-                tl: { col: 5, row: currentRowIdx - 1 },
+                tl: { col: 7, row: currentRowIdx - 1 },
                 ext: { width: 120, height: 60 },
                 editAs: 'oneCell',
               })
@@ -313,8 +405,8 @@ export async function GET(request: NextRequest) {
 
     nonImageJobs.forEach((job, idx) => {
       const relId = `rIdOle${idx + 1}`
-      // Reference cell F + row
-      const cellRef = `F${job.rowIndex}`
+      // Reference cell H + row (Column 8 = H)
+      const cellRef = `H${job.rowIndex}`
       oleObjectsXml += `<oleObject progId="Package" shapeId="0" r:id="${relId}" drawAspect="Icon" objectUpdateMode="Always" ref="${cellRef}"/>`
     })
     oleObjectsXml += '</oleObjects>'
