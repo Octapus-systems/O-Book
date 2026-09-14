@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { Wallet } from 'lucide-react'
 import { LoginForm } from './LoginForm'
 import { cn } from '@/lib/utils'
@@ -30,23 +29,11 @@ export function LoginCard({ className }: LoginCardProps) {
                 Welcome Back
               </h2>
               <p className="text-body-md text-on-card-secondary leading-relaxed">
-                Enter your PIN to access the dashboard
+                Sign in to access your dashboard
               </p>
             </header>
 
             <LoginForm />
-
-            <div className="mt-8 pt-5 border-t border-[rgba(109,74,255,0.10)] text-center">
-              <p className="text-body-md text-on-card-secondary">
-                Don&apos;t have an account?{' '}
-                <Link
-                  href="/signup"
-                  className="font-semibold text-[#6D4AFF] hover:text-[#8B6BFF] transition-colors duration-200"
-                >
-                  Sign up
-                </Link>
-              </p>
-            </div>
           </div>
         </div>
       </div>

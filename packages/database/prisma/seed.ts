@@ -54,8 +54,9 @@ async function main() {
 
   console.log('Roles created')
 
-  // Create admin user with PIN: 2133
-  const hashedPin = await bcrypt.hash('2133', 10)
+  // Create admin user
+  const adminPin = process.env.SEED_ADMIN_PIN || ''
+  const hashedPin = adminPin ? await bcrypt.hash(adminPin, 10) : ''
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@obook.com' },
     update: {
@@ -69,7 +70,7 @@ async function main() {
     },
   })
 
-  console.log('Admin user created (PIN: 2133)')
+  console.log('Admin user created')
 
   // Create default cashbook
   const defaultCashbook = await prisma.cashbook.upsert({
