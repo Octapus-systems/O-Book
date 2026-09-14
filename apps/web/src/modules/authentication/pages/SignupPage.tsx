@@ -1,10 +1,18 @@
-import { SignupCard } from '@/modules/authentication/components/SignupCard'
-import { AuthLayout } from '@/modules/authentication/layouts/AuthLayout'
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 export default function SignupPage() {
+  const router = useRouter()
+
+  useEffect(() => {
+    router.replace('/login')
+  }, [router])
+
   return (
-    <AuthLayout>
-      <SignupCard />
-    </AuthLayout>
+    <div className="min-h-screen flex items-center justify-center bg-[#0F0B1E]">
+      <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#6D4AFF]"></div>
+    </div>
   )
 }

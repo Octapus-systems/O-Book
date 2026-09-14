@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { Bell, Search, Wallet, Menu, LogOut } from 'lucide-react'
 import { useSidebarStore } from '@/lib/store'
-import { getAuthUser, clearAuthUser, type AuthUser } from '@/lib/auth-store'
+import { clearAuthUser } from '@/lib/auth-store'
+import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
 function getInitials(name: string): string {
@@ -18,18 +19,49 @@ function getInitials(name: string): string {
 export function TopHeader() {
   const router = useRouter()
   const { toggleSidebar } = useSidebarStore()
-  const [user, setUser] = useState<AuthUser | null>(null)
+  const [userName, setUserName] = useState<string>('')
+  const [userEmail, setUserEmail] = useState<string>('')
 
   useEffect(() => {
-    setUser(getAuthUser())
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUserEmail(session.user.email ?? '')
+        setUserName(
+          session.user.user_metadata?.full_name ||
+          session.user.user_metadata?.name ||
+          session.user.email?.split('@')[0] ||
+          'User'
+        )
+      }
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      if (session?.user) {
+        setUserEmail(session.user.email ?? '')
+        setUserName(
+          session.user.user_metadata?.full_name ||
+          session.user.user_metadata?.name ||
+          session.user.email?.split('@')[0] ||
+          'User'
+        )
+      } else {
+        setUserEmail('')
+        setUserName('')
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [])
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
     clearAuthUser()
-    router.replace('/')
+    router.replace('/login')
   }
 
-  const displayName = user?.name ?? 'User'
+  const displayName = userName || 'User'
   const initials = getInitials(displayName)
 
   return (
@@ -76,7 +108,7 @@ export function TopHeader() {
             <p className="font-title text-body-md font-bold leading-none text-on-surface">
               {displayName}
             </p>
-            <p className="text-label-sm text-outline">{user?.email ?? 'Signed in'}</p>
+            <p className="text-label-sm text-outline">{userEmail || 'Signed in'}</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-primary-fixed-dim bg-primary-fixed text-sm font-bold text-primary transition-colors group-hover:border-primary">
             {initials}
