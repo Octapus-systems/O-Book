@@ -99,7 +99,7 @@ export function TransactionTable({ transactions, selectedId, onSelect, onRowClic
         <table className="w-full min-w-[600px] border-collapse text-left sm:min-w-0">
           <thead className="border-b border-primary/10 bg-primary-fixed/20">
             <tr>
-              {['Description & User', 'Category', 'Amount', 'Balance', 'Action'].map((col) => (
+              {['Description', 'Added By', 'Category', 'Amount', 'Balance', 'Action'].map((col) => (
                 <th
                   key={col}
                   className="px-4 py-3 text-label-sm font-bold uppercase tracking-wider text-outline sm:px-6 sm:py-4"
@@ -128,22 +128,27 @@ export function TransactionTable({ transactions, selectedId, onSelect, onRowClic
                   )}
                 >
                   <td className="px-4 py-4 sm:px-6 sm:py-5">
-                    <div className="flex items-center gap-3">
+                    <div className="min-w-0">
+                      <p className="font-body text-body-md font-bold text-on-surface truncate sm:text-body-lg">
+                        {tx.description || '-'}
+                      </p>
+                      <p className="text-label-sm text-outline sm:text-label-sm">
+                        {tx.date} • {tx.time}
+                      </p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 sm:px-6 sm:py-5">
+                    <div className="flex items-center gap-2.5">
                       <div
                         className={cn(
-                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/20 text-xs font-bold sm:h-10 sm:w-10 sm:text-sm bg-primary-fixed text-primary'
+                          'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-primary/20 text-xs font-bold sm:h-8 sm:w-8 sm:text-xs bg-primary-fixed text-primary'
                         )}
                       >
                         {creatorInitials}
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-body text-body-md font-bold text-on-surface truncate sm:text-body-lg">
-                          {tx.description || '-'}
-                        </p>
-                        <p className="text-label-sm text-outline sm:text-label-sm">
-                          Added by {creatorName} • {tx.date} • {tx.time}
-                        </p>
-                      </div>
+                      <span className="font-body text-body-md font-semibold text-on-surface truncate">
+                        {creatorName}
+                      </span>
                     </div>
                   </td>
                   <td className="px-4 py-4 sm:px-6 sm:py-5">

@@ -230,44 +230,50 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const transaction = await prisma.$transaction(async (tx) => {
-      const created = await tx.transaction.create({
-        data: {
-          type,
-          amount,
-          currency,
-          categoryId,
-          paymentMethodId,
-          cashbookId,
-          description: description ?? null,
-          date: date ? new Date(date) : new Date(),
-          createdById: effectiveCreatedById,
-        },
-        include: {
-          category: true,
-          paymentMethod: true,
-          createdBy: true,
-          cashbook: true,
-        },
-      })
-
-      await tx.auditLog.create({
-        data: {
-          transactionId: created.id,
-          userId: effectiveCreatedById,
-          action: 'CREATED',
-          changes: {
+    const transaction = await prisma.$transaction(
+      async (tx) => {
+        const created = await tx.transaction.create({
+          data: {
             type,
-            amount: Number(amount),
+            amount,
             currency,
             categoryId,
             paymentMethodId,
+            cashbookId,
+            description: description ?? null,
+            date: date ? new Date(date) : new Date(),
+            createdById: effectiveCreatedById,
           },
-        },
-      })
+          include: {
+            category: true,
+            paymentMethod: true,
+            createdBy: true,
+            cashbook: true,
+          },
+        })
 
-      return created
-    })
+        await tx.auditLog.create({
+          data: {
+            transactionId: created.id,
+            userId: effectiveCreatedById,
+            action: 'CREATED',
+            changes: {
+              type,
+              amount: Number(amount),
+              currency,
+              categoryId,
+              paymentMethodId,
+            },
+          },
+        })
+
+        return created
+      },
+      {
+        maxWait: 15000,
+        timeout: 30000,
+      }
+    )
 
     if (files.length > 0) {
       await saveAttachments(transaction.id, files, createdById)

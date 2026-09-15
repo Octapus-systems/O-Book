@@ -9,12 +9,16 @@ export function getDatabaseErrorMessage(error: unknown): string {
   }
 
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    return 'Database request failed. Verify the schema is migrated and seeded.'
+    return `Database request error (${error.code}): ${error.message}`
   }
 
-  if (error instanceof Error && error.message.includes('tenant/user')) {
-    return 'Supabase project not found. Restore or unpause the project in the Supabase dashboard, then update DATABASE_URL.'
+  if (error instanceof Error) {
+    if (error.message.includes('tenant/user')) {
+      return 'Supabase project not found. Restore or unpause the project in the Supabase dashboard, then update DATABASE_URL.'
+    }
+    return error.message
   }
 
   return 'Internal server error'
 }
+

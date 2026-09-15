@@ -136,8 +136,6 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
   }, [router, isEditMode, setValue, watch])
 
   useEffect(() => {
-    if (!isAdmin) return
-
     async function loadUsers() {
       setIsLoadingUsers(true)
       try {
@@ -154,7 +152,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
     }
 
     loadUsers()
-  }, [isAdmin])
+  }, [])
 
   useEffect(() => {
     async function loadOptions() {
@@ -256,7 +254,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
             paymentMethodId: data.paymentMethodId,
             date: new Date(data.date).toISOString(),
             description: data.description?.trim() || null,
-            createdById: isAdmin ? (data.createdById || user.id) : undefined,
+            createdById: data.createdById || user.id,
           }),
         })
 
@@ -275,7 +273,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
         formData.append('categoryId', data.categoryId)
         formData.append('paymentMethodId', data.paymentMethodId)
         formData.append('date', new Date(data.date).toISOString())
-        formData.append('createdById', isAdmin ? (data.createdById || user.id) : user.id)
+        formData.append('createdById', data.createdById || user.id)
         if (data.description?.trim()) {
           formData.append('description', data.description.trim())
         }
@@ -301,7 +299,7 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
             paymentMethodId: '',
             date: todayIsoDate(),
             description: '',
-            createdById: isAdmin ? data.createdById : user.id,
+            createdById: data.createdById || user.id,
           })
           setAttachments([])
           setSuccessMessage('Entry saved successfully! Add new entry below.')
@@ -458,28 +456,26 @@ export function TransactionEntryForm({ initialType = 'CASH_IN', transactionId, i
         </div>
       </div>
 
-      {isAdmin && (
-        <div className="space-y-2">
-          <label className="text-label-sm font-bold uppercase tracking-wider text-outline">
-            Creator User
-          </label>
-          <select
-            className="squircle w-full min-h-[44px] border border-outline-variant bg-surface-container-lowest px-4 py-3 font-body text-body-md outline-none focus:border-primary/40"
-            disabled={isLoadingUsers}
-            {...register('createdById')}
-          >
-            <option value="">Select User</option>
-            {usersList.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} ({u.role?.name || u.role?.slug || 'User'})
-              </option>
-            ))}
-          </select>
-          {errors.createdById && (
-            <p className="text-label-sm text-red-600">{errors.createdById.message}</p>
-          )}
-        </div>
-      )}
+      <div className="space-y-2">
+        <label className="text-label-sm font-bold uppercase tracking-wider text-outline">
+          Added By
+        </label>
+        <select
+          className="squircle w-full min-h-[44px] border border-outline-variant bg-surface-container-lowest px-4 py-3 font-body text-body-md outline-none focus:border-primary/40"
+          disabled={isLoadingUsers}
+          {...register('createdById')}
+        >
+          <option value="">Select User</option>
+          {usersList.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name} ({u.role?.name || u.role?.slug || 'User'})
+            </option>
+          ))}
+        </select>
+        {errors.createdById && (
+          <p className="text-label-sm text-red-600">{errors.createdById.message}</p>
+        )}
+      </div>
 
       <div className="space-y-2">
         <label className="text-label-sm font-bold uppercase tracking-wider text-outline">
