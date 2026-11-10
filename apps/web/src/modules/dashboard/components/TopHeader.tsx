@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bell, Search, Wallet, Menu, LogOut } from 'lucide-react'
+import { Bell, Wallet, Menu, LogOut } from 'lucide-react'
 import { useSidebarStore } from '@/lib/store'
 import { clearAuthUser } from '@/lib/auth-store'
 import { supabase } from '@/lib/supabase'
@@ -74,15 +74,6 @@ export function TopHeader() {
         >
           <Menu className="h-6 w-6" />
         </button>
-
-        <div className="relative hidden w-full max-w-md md:block">
-          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
-          <input
-            type="text"
-            placeholder="Search transactions, hashes, or notes..."
-            className="squircle w-full border border-outline-variant bg-surface-container-lowest py-2.5 pl-11 pr-4 font-body text-body-md outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary"
-          />
-        </div>
       </div>
 
       <div className="flex items-center gap-2 lg:gap-4">

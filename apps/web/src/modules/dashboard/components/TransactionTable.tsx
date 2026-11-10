@@ -12,6 +12,34 @@ type TransactionTableProps = {
   selectedId: string | null
   onSelect: (id: string) => void
   onRowClick?: (transaction: Transaction) => void
+  highlightTerms?: string[]
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Wraps every occurrence of the search terms in a <mark> so matches stand out
+function Highlight({ text, terms }: { text: string; terms: string[] }) {
+  if (!terms.length || !text) return <>{text}</>
+  const pattern = new RegExp(
+    `(${[...terms].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')})`,
+    'gi'
+  )
+  const parts = text.split(pattern)
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <mark key={i} className="rounded bg-yellow-200 px-0.5 text-inherit">
+            {part}
+          </mark>
+        ) : (
+          part
+        )
+      )}
+    </>
+  )
 }
 
 const STATUS_STYLES: Record<
@@ -64,7 +92,13 @@ function getInitials(name: string): string {
     .toUpperCase()
 }
 
-export function TransactionTable({ transactions, selectedId, onSelect, onRowClick }: TransactionTableProps) {
+export function TransactionTable({
+  transactions,
+  selectedId,
+  onSelect,
+  onRowClick,
+  highlightTerms = [],
+}: TransactionTableProps) {
   const router = useRouter()
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null)
 
@@ -127,13 +161,13 @@ export function TransactionTable({ transactions, selectedId, onSelect, onRowClic
                     isSelected && 'border-l-4 border-primary bg-primary-fixed/5'
                   )}
                 >
-                  <td className="px-4 py-4 sm:px-6 sm:py-5">
+                  <td className="min-w-[180px] max-w-[280px] px-4 py-4 sm:px-6 sm:py-5">
                     <div className="min-w-0">
-                      <p className="font-body text-body-md font-bold text-on-surface truncate sm:text-body-lg">
-                        {tx.description || '-'}
+                      <p className="font-body text-body-md font-bold text-on-surface whitespace-normal break-words [overflow-wrap:anywhere] sm:text-body-lg">
+                        <Highlight text={tx.description || '-'} terms={highlightTerms} />
                       </p>
                       <p className="text-label-sm text-outline sm:text-label-sm">
-                        {tx.date} • {tx.time}
+                        <Highlight text={tx.date} terms={highlightTerms} /> • {tx.time}
                       </p>
                     </div>
                   </td>
@@ -147,7 +181,7 @@ export function TransactionTable({ transactions, selectedId, onSelect, onRowClic
                         {creatorInitials}
                       </div>
                       <span className="font-body text-body-md font-semibold text-on-surface truncate">
-                        {creatorName}
+                        <Highlight text={creatorName} terms={highlightTerms} />
                       </span>
                     </div>
                   </td>
@@ -158,7 +192,7 @@ export function TransactionTable({ transactions, selectedId, onSelect, onRowClic
                         CATEGORY_STYLES[tx.categoryStyle as keyof typeof CATEGORY_STYLES]
                       )}
                     >
-                      {tx.category}
+                      <Highlight text={tx.category} terms={highlightTerms} />
                     </span>
                   </td>
                   <td className="px-4 py-4 sm:px-6 sm:py-5">
@@ -169,7 +203,7 @@ export function TransactionTable({ transactions, selectedId, onSelect, onRowClic
                           tx.amount >= 0 ? 'text-green-700' : 'text-red-700'
                         )}
                       >
-                        {formatAmount(tx.amount, tx.currency)}
+                        <Highlight text={formatAmount(tx.amount, tx.currency)} terms={highlightTerms} />
                       </span>
                       <span className="text-label-xs text-outline sm:text-label-sm">{tx.currency}</span>
                     </div>

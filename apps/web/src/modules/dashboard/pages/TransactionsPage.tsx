@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, type FormEvent } from 'react'
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { TransactionFilters } from '../components/TransactionFilters'
@@ -13,6 +13,63 @@ import { DEFAULT_CURRENCY, type SupportedCurrency, formatCurrencyAmount } from '
 
 type DateRangeOption = 'all-time' | 'today' | 'week' | 'last-30-days' | 'custom'
 type TransactionType = 'all' | 'cash-in' | 'cash-out'
+
+const normalizeSearchText = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim()
+
+const getSearchTerms = (query: string) => normalizeSearchText(query).split(' ').filter(Boolean)
+
+function getAmountText(tx: Transaction): string {
+  const absAmount = Math.abs(tx.amount)
+  return [
+    String(absAmount),
+    absAmount.toFixed(2),
+    absAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+  ].join(' ')
+}
+
+// Every word in the query must appear somewhere in the transaction's searchable fields
+function matchesSearch(tx: Transaction, query: string): boolean {
+  const terms = getSearchTerms(query)
+  if (terms.length === 0) return true
+  const haystack = normalizeSearchText(
+    [
+      tx.entity,
+      tx.description ?? '',
+      tx.category,
+      tx.createdBy?.name ?? '',
+      tx.method ?? '',
+      tx.date,
+      getAmountText(tx),
+    ].join(' ')
+  )
+  return terms.every((term) => haystack.includes(term))
+}
+
+// Relevance score used to sort search results (higher = better match)
+function getSearchScore(tx: Transaction, query: string): number {
+  const phrase = normalizeSearchText(query)
+  const terms = getSearchTerms(query)
+  const description = normalizeSearchText(tx.description ?? tx.entity)
+  const category = normalizeSearchText(tx.category)
+  const creator = normalizeSearchText(tx.createdBy?.name ?? '')
+  const amount = getAmountText(tx)
+
+  let score = 0
+  if (description === phrase) score += 200
+  else if (description.startsWith(phrase)) score += 120
+  else if (description.includes(phrase)) score += 80
+  if (category === phrase || creator === phrase) score += 60
+  if (amount.split(' ').includes(phrase)) score += 60
+
+  for (const term of terms) {
+    if (description.split(' ').some((word) => word.startsWith(term))) score += 15
+    else if (description.includes(term)) score += 10
+    if (category.includes(term)) score += 6
+    if (creator.includes(term)) score += 6
+    if (amount.includes(term)) score += 4
+  }
+  return score
+}
 
 export default function TransactionsPage({
   initialApiTransactions = [],
@@ -36,7 +93,8 @@ export default function TransactionsPage({
   const [error, setError] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   
-  // Search state
+  // Search state: searchInput is what's typed, searchQuery is applied on Search click / Enter
+  const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   
   // Filter states
@@ -136,13 +194,12 @@ export default function TransactionsPage({
 
     // Filter by search query
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(
-        (tx) =>
-          tx.entity.toLowerCase().includes(query) ||
-          tx.category.toLowerCase().includes(query) ||
-          tx.description?.toLowerCase().includes(query)
-      )
+      filtered = filtered
+        .filter((tx) => matchesSearch(tx, searchQuery))
+        .map((tx, index) => ({ tx, index, score: getSearchScore(tx, searchQuery) }))
+        // Best matches first; ties keep the original (newest first) order
+        .sort((a, b) => b.score - a.score || a.index - b.index)
+        .map(({ tx }) => tx)
     }
 
     // Filter by user
@@ -217,8 +274,20 @@ export default function TransactionsPage({
   }, [searchQuery, selectedType, selectedCategory, selectedDateRange, selectedCurrency, selectedUser, startDate, endDate, pageSize])
 
   const handleSearchChange = useCallback((value: string) => {
-    setSearchQuery(value)
+    setSearchInput(value)
+    // Clearing the box resets the results straight away
+    if (!value.trim()) setSearchQuery('')
   }, [])
+
+  const handleSearchSubmit = useCallback(
+    (e?: FormEvent) => {
+      e?.preventDefault()
+      setSearchQuery(searchInput.trim())
+    },
+    [searchInput]
+  )
+
+  const highlightTerms = useMemo(() => getSearchTerms(searchQuery), [searchQuery])
 
   const handleRowClick = useCallback((transaction: Transaction) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -254,13 +323,7 @@ export default function TransactionsPage({
       
       // 4. Filter by search query
       if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase()
-        filtered = filtered.filter(
-          (tx) =>
-            tx.entity.toLowerCase().includes(query) ||
-            tx.category.toLowerCase().includes(query) ||
-            tx.description?.toLowerCase().includes(query)
-        )
+        filtered = filtered.filter((tx) => matchesSearch(tx, searchQuery))
       }
       
       // 5. Filter by user
@@ -461,7 +524,7 @@ export default function TransactionsPage({
 
   return (
     <>
-      <div className="min-w-0 flex-1 space-y-6">
+      <div className="min-w-0 flex-1 space-y-6 pb-24">
         <TransactionStatsCard 
           transactions={transactions} 
           currency={selectedCurrency}
@@ -471,16 +534,33 @@ export default function TransactionsPage({
         />
         
         {/* Search Input */}
-        <div className="glass-surface rim-light squircle flex items-center gap-3 px-4 py-3 sm:px-6">
-          <Search className="h-5 w-5 text-outline" />
+        <form
+          onSubmit={handleSearchSubmit}
+          className="glass-surface rim-light squircle flex items-center gap-3 py-2 pl-4 pr-2 sm:pl-6"
+        >
+          <Search className="h-5 w-5 shrink-0 text-outline" />
           <input
-            type="text"
-            placeholder="Search by entity, category, or description..."
-            value={searchQuery}
+            type="search"
+            placeholder="Search by description, category, user, or amount..."
+            value={searchInput}
             onChange={(e) => handleSearchChange(e.target.value)}
-            className="flex-1 bg-transparent font-body text-body-md text-on-surface placeholder:text-outline outline-none"
+            className="min-w-0 flex-1 bg-transparent py-1 font-body text-body-md text-on-surface placeholder:text-outline outline-none"
           />
-        </div>
+          <button
+            type="submit"
+            className="squircle flex shrink-0 items-center gap-2 bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 active:scale-95 sm:px-5"
+          >
+            <Search className="h-4 w-4" />
+            <span className="hidden sm:inline">Search</span>
+          </button>
+        </form>
+
+        {searchQuery && !isLoading && !error && (
+          <p className="px-1 text-label-sm text-outline">
+            {filteredTransactions.length} result{filteredTransactions.length === 1 ? '' : 's'} for{' '}
+            <span className="font-bold text-on-surface">&ldquo;{searchQuery}&rdquo;</span>, sorted by best match
+          </p>
+        )}
 
         <TransactionFilters 
           selectedCurrency={selectedCurrency}
@@ -528,6 +608,7 @@ export default function TransactionsPage({
               selectedId={selectedId}
               onSelect={setSelectedId}
               onRowClick={handleRowClick}
+              highlightTerms={highlightTerms}
             />
 
             {/* Pagination Controls */}
