@@ -23,7 +23,7 @@ export function FloatingActionButton() {
     <button
       type="button"
       onClick={() => router.push(`/transactions/new?currency=${currentCurrency}`)}
-      className="group fixed bottom-10 right-10 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-primary-container text-on-primary-container shadow-2xl transition-all hover:scale-110 active:scale-95"
+      className="group fixed bottom-4 right-4 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-primary-container text-on-primary-container shadow-2xl transition-all hover:scale-110 active:scale-95"
       aria-label="Quick Add Transaction"
     >
       <Plus className="h-8 w-8" />
